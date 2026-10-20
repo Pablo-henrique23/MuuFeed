@@ -1,0 +1,35 @@
+O desafio é construir uma aplicação para o usuário final que resolva um problema da pecuaria leiteira por meio de uma base explicita de conhecimento e um motor de inferência.
+
+Tema escolhido: T2 Dietas - Formulação e verificação de dietas para bovinos leiteiros de acordo com: raça, peso médio por lote, idade, estado produtivo, destinação economica e produção.
+
+Os projetos serão qualificados numa escala de 1 a 10 e serão medidos de acordo com o ptencial de se tornarem soluções de fato que venham a resolver os problemas propostos.
+
+Os integrantes do grupo deverão demonstrar:
+- habilidade no uso de agentes de codificação - com IA
+- Capacidade de trabalho em equipe
+- Liderança
+- Controle emocional
+
+Espera-se que as soluções se caracterizem como provas de conceito e no caso deste tema alem da completude da solução sera avaliada a capacidade que o grupo terá para se organizar junto com a IA para obtençao de um resultado satisfatoio e o conhecimento adquirido no desenvolvimento da atividade.
+
+O sistema produzido deverá ser apresentado incluindo a sua demonstração.
+
+É obrigatorio a geração de uma documentação e criação de uma apresentação que mostre de forma organizada todo o processo de desenvolvimento, a arquitetura tecnologica e as regras de produção utilizadas.
+
+Diretrizes e dicas:
+- Não use a LLM como o sitema especialista.
+- Escolha o agente de IA a ser usado
+- Antes de qualquer coisa, peça ajuda a IA p/ explicar o que é um sistema especialista e como funciona um motor de inferencia.
+- Escolha a tecnologia que sera usada para o desenvolvimento
+- De acordo com o tema proposto, pesquise e entenda o contexto de negocio ao qual o problema esta inserido, auxilie-se com a IA.
+- Defina o escopo do projeto claramente e as diretrizes da arquitetura tecnologica
+- Implemente e teste.
+- Estuda e entenda em detalhes o que foi produzido
+- A solução final deve RODAR POR COMPLETO EM LOCALHOST
+
+-- O que se espera
+1- Demonstração: o sistema deve ser apresentado em funcionamento
+2- Documentação: obrigatoria: processo de dev, arquitetura tecnologica e regras de produção utilizadas
+3- Apresentação: obrigatoria: mostre de forma organizada todo o processo do uso da IA ao resultado.
+
+Teste com casos conhecidos.
