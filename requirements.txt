@@ -1,0 +1,10 @@
+streamlit>=1.40
+pandas
+plotly
+scipy
+nasem_dairy
+numpy<2
+pyarrow>=14,<18
+reportlab
+pytest
+pypdf

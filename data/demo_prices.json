@@ -1,0 +1,17 @@
+{
+  "_meta": {
+    "unidade": "R$/kg de matéria natural",
+    "aviso": "Preços ILUSTRATIVOS (ordem de grandeza do mercado brasileiro). Sem fonte de mercado confirmada: substitua pelos preços reais da propriedade.",
+    "data_referencia": null
+  },
+  "precos": {
+    "Corn grain dry, medium grind": 1.15, "Corn grain dry, fine grind": 1.20, "Corn silage, typical": 0.30,
+    "Corn silage, mature": 0.28, "Soybean meal, solvent 48CP": 2.45, "Cottonseed meal": 1.95,
+    "Cottonseed, whole": 1.90, "Citrus pulp, dry": 1.35, "Wheat bran": 1.10, "Wheat middlings": 1.10,
+    "Rice bran": 1.00, "Soybean hulls": 1.20, "Molasses": 1.20, "Alfalfa meal": 2.20, "Bermudagrass hay": 1.00,
+    "Sorghum grain, dry, ground": 1.05, "DDGS, high protein": 1.60, "Corn gluten feed, dry": 1.30,
+    "Corn gluten meal": 4.00, "Brewers grains, wet": 0.35, "Sunflower meal": 1.60, "Canola meal": 2.30,
+    "Soybeans, whole roasted": 3.20, "Limestone": 0.50, "Calcium phosphate (di)": 5.50,
+    "Sodium chloride (salt)": 1.20, "Sodium bicarbonate": 6.00, "Magnesium oxide": 5.00
+  }
+}
