@@ -47,6 +47,8 @@ class FormulationRequest:
     infusion: Mapping[str, Any] | None = None
     max_iterations: int = 100
     restarts: int = 2
+    min_ndf_pct_dm: float | None = None  # limite explícito do cenário, nunca default nutricional
+    max_starch_pct_dm: float | None = None
 
 
 def _valid_real(value: Any, what: str, *, positive: bool = False) -> float:
@@ -72,6 +74,11 @@ def validate_request(req: FormulationRequest) -> None:
         raise ValueError("max_iterations inválido")
     if type(req.restarts) is not int or not 1 <= req.restarts <= 10:
         raise ValueError("restarts deve estar entre 1 e 10")
+    for value, label in ((req.min_ndf_pct_dm, "FDN mínima"), (req.max_starch_pct_dm, "Amido máximo")):
+        if value is not None:
+            _valid_real(value, label)
+            if float(value) > 100:
+                raise ValueError(f"{label}: percentual deve estar entre 0 e 100")
     min_total = 0.0
     max_total = 0.0
     for f in req.feeds:
@@ -171,6 +178,36 @@ def formulate_diet(
     if missing:
         raise ValueError(f"Ingredientes ausentes na biblioteca NASEM: {missing}")
 
+    # FDN/amido no CSV NASEM são tratados como % da MS somente após validar os
+    # dados selecionados. Sem valor não se substitui por zero.
+    lib_nut = load_library() if catalog_names is None or request.min_ndf_pct_dm is not None or request.max_starch_pct_dm is not None else None
+    # Para avaliações reais, carregar biblioteca também quando não há limites;
+    # testes com catálogo sintético e evaluator injetado não precisam dela.
+    if lib_nut is None and evaluate is None:
+        lib_nut = load_library()
+    comp = {}
+    if lib_nut is not None:
+        for column in ('Fd_Name', 'Fd_NDF', 'Fd_St'):
+            if column not in lib_nut.columns:
+                raise ValueError(f"Biblioteca NASEM sem coluna exigida: {column}")
+        sub = lib_nut.set_index('Fd_Name')
+        for feed in request.feeds:
+            if feed.name not in sub.index:
+                raise ValueError(f"Ingrediente não encontrado para FDN/amido: {feed.name}")
+            row = sub.loc[feed.name]
+            if isinstance(row, pd.DataFrame):
+                raise ValueError(f"Ingrediente com linhas ambíguas na biblioteca: {feed.name}")
+            comp[feed.name] = {}
+            for attr, column in (('ndf', 'Fd_NDF'), ('starch', 'Fd_St')):
+                value = pd.to_numeric(row[column], errors='coerce')
+                if pd.isna(value) or not math.isfinite(float(value)) or not 0 <= float(value) <= 100:
+                    comp[feed.name][attr] = None
+                else:
+                    comp[feed.name][attr] = float(value)
+    for attr, limit in (('ndf', request.min_ndf_pct_dm), ('starch', request.max_starch_pct_dm)):
+        if limit is not None and (not comp or any(comp[f.name][attr] is None for f in request.feeds)):
+            raise ValueError(f"Não há dados válidos e completos para impor restrição de {attr}; não serão usados zeros artificiais")
+
     feeds = request.feeds
     n = len(feeds)
     names = [f.name for f in feeds]
@@ -208,11 +245,20 @@ def formulate_diet(
         v = metrics(x)
         return (v[2] - v[3]) / max(1.0, v[3])
 
+    def percent_dm(x: np.ndarray, attr: str) -> float | None:
+        if not comp or any(comp[f.name][attr] is None for f in feeds):
+            return None
+        return float(np.dot(x, [comp[f.name][attr] for f in feeds]) / total)
+
     constraints = [
         {"type": "eq", "fun": lambda x: float(x.sum() - total)},
         {"type": "ineq", "fun": constraints_energy},
         {"type": "ineq", "fun": constraints_protein},
     ]
+    if request.min_ndf_pct_dm is not None:
+        constraints.append({"type": "ineq", "fun": lambda x: (percent_dm(x, 'ndf') - request.min_ndf_pct_dm) / 100})
+    if request.max_starch_pct_dm is not None:
+        constraints.append({"type": "ineq", "fun": lambda x: (request.max_starch_pct_dm - percent_dm(x, 'starch')) / 100})
     starting = np.array([
         0.0 if f.initial_dm_kg is None else f.initial_dm_kg for f in feeds
     ], dtype=float)
@@ -254,8 +300,12 @@ def formulate_diet(
             continue
         if (abs(float(x.sum()) - total) <= 1e-5
                 and np.all(x >= lower - 1e-6) and np.all(x <= upper + 1e-6)
-                and m[0] >= m[1] and m[2] >= m[3]):
+                and m[0] >= m[1] and m[2] >= m[3]
+                and (request.min_ndf_pct_dm is None or percent_dm(x, 'ndf') >= request.min_ndf_pct_dm - 1e-7)
+                and (request.max_starch_pct_dm is None or percent_dm(x, 'starch') <= request.max_starch_pct_dm + 1e-7)):
             valid.append((objective(x), x.copy(), m))
+    checked_extra = (["fdn"] if request.min_ndf_pct_dm is not None else []) + (["amido"] if request.max_starch_pct_dm is not None else [])
+    unverified = [v for v in ["fdn", "fibra_fisicamente_efetiva", "amido", "minerais", "vitaminas", "limites_nutricionais_de_inclusao"] if v not in checked_extra]
     base = {
         "status": "experimental_sem_dieta_validada",
         "nutrition_completeness": "nao_avaliada",
@@ -263,14 +313,14 @@ def formulate_diet(
         "evaluation_count": eval_cached.cache_info().misses,
         "warnings": [
             "NÃO USAR para alimentar animais: modelo parcial.",
-            "Fibra, amido, minerais, limites nutricionais de inclusão e outras necessidades NÃO AVALIADOS.",
+            "FDN e amido apenas calculados se houver dados; sem limite configurado não são verificados. Fibra efetiva, minerais e outras necessidades NÃO AVALIADOS.",
             "Otimização local SLSQP: não garante mínimo global.",
             "Consumo total de matéria seca foi fornecido como entrada, não previsto pelo sistema.",
             "Limites mínimo/máximo são apenas operacionais informados pelo usuário.",
         ],
         "solver_messages": failures[-10:],
-        "constraints_checked": ["total_ms", "me", "mp", "limites_operacionais"],
-        "constraints_not_checked": ["fdn", "fibra_fisicamente_efetiva", "amido", "minerais", "vitaminas", "limites_nutricionais_de_inclusao"],
+        "constraints_checked": ["total_ms", "me", "mp", "limites_operacionais"] + checked_extra,
+        "constraints_not_checked": unverified,
     }
     if not valid:
         return base
@@ -286,6 +336,8 @@ def formulate_diet(
             "price_brl_kg_as_fed": float(f.price_as_fed_brl_kg),
             "cost_brl_cow_day": as_fed * f.price_as_fed_brl_kg,
         })
+    ndf_pct = percent_dm(x, 'ndf')
+    starch_pct = percent_dm(x, 'starch')
     base.update({
         "status": "candidata_experimental",
         "diet": rows,
@@ -296,6 +348,12 @@ def formulate_diet(
         "cost_brl_cow_day": cost,
         "cost_brl_herd_day": cost * request.herd_size,
         "cost_brl_herd_30_days": cost * request.herd_size * 30,
+        "nutrient_composition": {
+            "ndf_pct_dm": ndf_pct, "starch_pct_dm": starch_pct,
+            "ndf_min_pct_dm": request.min_ndf_pct_dm, "starch_max_pct_dm": request.max_starch_pct_dm,
+            "source": "NASEM_feed_library.csv: Fd_NDF, Fd_St; ponderação pela MS",
+            "is_nutritionally_validated": False,
+        },
         "nutrition": {
             "me_intake_mcal_day": m[0], "me_requirement_mcal_day": m[1],
             "mp_intake_g_day": m[2], "mp_requirement_g_day": m[3],
@@ -303,6 +361,6 @@ def formulate_diet(
         "activated_rules": [
             {"id": "R_ME", "status": "atendida", "explanation": "Energia metabolizável ingerida >= exigida no cenário avaliado"},
             {"id": "R_MP", "status": "atendida", "explanation": "Proteína metabolizável ingerida >= exigida no cenário avaliado"},
-        ],
+        ] + ([{"id": "R_FDN_MIN", "status": "atendida", "explanation": f"FDN {ndf_pct:.2f}% MS >= mínimo configurado {request.min_ndf_pct_dm:.2f}% MS", "source": "Limite informado pelo usuário; composição NASEM"}] if request.min_ndf_pct_dm is not None else []) + ([{"id": "R_AMIDO_MAX", "status": "atendida", "explanation": f"Amido {starch_pct:.2f}% MS <= máximo configurado {request.max_starch_pct_dm:.2f}% MS", "source": "Limite informado pelo usuário; composição NASEM"}] if request.max_starch_pct_dm is not None else []),
     })
     return base
