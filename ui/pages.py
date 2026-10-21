@@ -7,6 +7,7 @@ import streamlit as st
 
 from models import ESTADOS, PADROES_AVANCADOS, Lote
 from services.demo_scenario import cenario_demonstrativo
+from services.financeiro import resumo_financeiro
 from services.pdf_report import gerar_relatorio_pdf
 from services.formulation_service import executar_formulacao, formulador_conectado
 from ui.state import adicionar, get_catalogo, ir_para, montar_requisicao
@@ -251,9 +252,10 @@ def _banner_resultado(res) -> None:
 
 
 def _exportar(res) -> None:
-    """PDF só para resultado real (otimo) ou para o cenário demonstrativo, com marca d'água."""
+    """PDF para dieta real devolvida pelo formulador (otimo ou candidata_experimental) ou cenário demonstrativo."""
     ss = st.session_state
-    if res is not None and res.status in ("otimo", "candidata_experimental", "demonstracao"):
+    real = res is not None and res.status in ("otimo", "candidata_experimental") and bool(res.itens)
+    if real or (res is not None and res.status == "demonstracao"):
         demo = res.status == "demonstracao"
         req = ss.get("requisicao_resultado")
         lote = None if demo else (req.lote if req else ss["lote"])
@@ -268,6 +270,8 @@ def _exportar(res) -> None:
                            type="primary")
         if demo:
             st.caption("O PDF do cenário demonstrativo leva marca d'água e não é um relatório de dieta formulada.")
+        elif res.status == "candidata_experimental":
+            st.caption("O PDF identifica esta dieta como candidata experimental, não validada nutricionalmente.")
     else:
         st.button("Exportar relatório PDF", disabled=True, help="Disponível quando houver uma dieta formulada.")
 
@@ -291,21 +295,31 @@ def pagina_resultados() -> None:
         for t in res.nao_avaliadas:
             st.caption(f"Não avaliado: {t}")
         return
-    n = lote.n_vacas if (lote and res.status in ("otimo", "candidata_experimental")) else None
-    m = st.columns(3)
-    m[0].metric("Custo por vaca/dia", brl(res.custo_vaca_dia))
-    m[1].metric("Custo do lote/dia", brl(res.custo_vaca_dia * n) if n else "—")
-    m[2].metric("Custo mensal estimado (30 dias)", brl(res.custo_vaca_dia * n * 30) if n else "—")
+    req = ss.get("requisicao_resultado")
+    lote_ref = req.lote if req else lote  # mesma fonte do PDF: o lote usado na formulação
+    n = lote_ref.n_vacas if (lote_ref and res.status in ("otimo", "candidata_experimental")) else None
+    resumo = resumo_financeiro(res, n, req.ingredientes if (req and res.status != "demonstracao") else None)
+    m = st.columns(4)
+    m[0].metric("Consumo de MS (kg MS/vaca/dia)", num(resumo.consumo_ms_kg, 2))
+    m[1].metric("Custo por vaca/dia", brl(resumo.custo_vaca_dia))
+    m[2].metric("Custo do lote/dia", brl(resumo.custo_lote_dia))
+    m[3].metric("Custo mensal estimado (30 dias)", brl(resumo.custo_mes))
+    for aviso_fin in resumo.inconsistencias:
+        st.warning(f"Inconsistência financeira: {aviso_fin}")
     t1, t2, t3, t4 = st.tabs(["Dieta", "Nutrientes", "Regras e restrições", "Avisos e limitações"])
     with t1:
-        df = pd.DataFrame([{"Ingrediente": i.nome, "kg MS/vaca/dia": i.kg_ms, "kg MN/vaca/dia": i.kg_mn,
-                            "Custo (R$/vaca/dia)": i.custo_brl} for i in res.itens])
+        linhas = [{"Ingrediente": l.nome, "kg MS/vaca/dia": l.kg_ms, "kg MN/vaca/dia": l.kg_mn,
+                   "Preço (R$/kg MN)": l.preco_mn_brl_kg, "Custo (R$/vaca/dia)": l.custo_brl} for l in resumo.linhas]
+        linhas.append({"Ingrediente": "Total", "kg MS/vaca/dia": resumo.consumo_ms_kg, "kg MN/vaca/dia": resumo.consumo_mn_kg,
+                       "Preço (R$/kg MN)": None, "Custo (R$/vaca/dia)": resumo.custo_vaca_dia})
+        df = pd.DataFrame(linhas)
+        graf = df.iloc[:-1]
         st.dataframe(df, hide_index=True, use_container_width=True, column_config={
             c: st.column_config.NumberColumn(format="%.2f") for c in df.columns[1:]})
-        tot_ms = df["kg MS/vaca/dia"].sum()
-        fig = go.Figure(go.Bar(x=df["kg MS/vaca/dia"] / tot_ms * 100, y=df["Ingrediente"], orientation="h",
+        tot_ms = resumo.consumo_ms_kg
+        fig = go.Figure(go.Bar(x=graf["kg MS/vaca/dia"] / tot_ms * 100, y=graf["Ingrediente"], orientation="h",
                                marker_color=VERDE, hovertemplate="%{y}: %{x:.1f}% da MS<extra></extra>"))
-        fig.update_layout(title="Composição da dieta (% da MS)", height=80 + 36 * len(df), margin=dict(l=0, r=10, t=40, b=0),
+        fig.update_layout(title="Composição da dieta (% da MS)", height=80 + 36 * len(graf), margin=dict(l=0, r=10, t=40, b=0),
                           yaxis=dict(autorange="reversed"), xaxis_title="% da matéria seca", plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, use_container_width=True)
     with t2:

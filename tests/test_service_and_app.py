@@ -152,3 +152,37 @@ def test_botao_pdf_habilitado_apenas_com_resultado_real():
 def test_servico_identifica_a_formulacao():
     r = fs.executar_formulacao(req())
     assert r.id_formulacao.startswith("MF-") and r.executada_em
+
+
+def test_ui_candidata_experimental_exporta_e_mostra_preco_consumo_e_custos():
+    from tests.factories import resultado_teste, ingredientes_teste
+    req = RequisicaoFormulacao(lote_ok(n_vacas=40), ingredientes_teste())
+    at = _com_resultado(resultado_teste("candidata_experimental"), req)
+    assert not at.exception
+    assert len(at.get("download_button")) == 1                       # exportação habilitada
+    assert at.session_state["resultado"].status == "candidata_experimental"  # status preservado
+    m = {x.label: x.value for x in at.metric}
+    assert m["Consumo de MS (kg MS/vaca/dia)"] == "12,00"
+    assert m["Custo por vaca/dia"] == "R$ 14,54"
+    assert m["Custo do lote/dia"] == "R$ 581,41" and m["Custo mensal estimado (30 dias)"] == "R$ 17.442,42"
+    df = at.dataframe[0].value
+    assert "Preço (R$/kg MN)" in df.columns
+    assert list(df["Preço (R$/kg MN)"].iloc[:2]) == [0.30, 2.45]
+    assert df.iloc[-1]["Ingrediente"] == "Total" and df.iloc[-1]["kg MS/vaca/dia"] == pytest.approx(12.0)
+    assert not [w for w in at.warning if "Inconsistência financeira" in w.value]
+
+
+def test_ui_candidata_sem_dieta_real_nao_exporta():
+    from dataclasses import replace
+    from tests.factories import resultado_teste
+    at = _com_resultado(replace(resultado_teste("candidata_experimental"), itens=[]))
+    assert not at.exception and len(at.get("download_button")) == 0
+    assert [b for b in at.button if b.label == "Exportar relatório PDF"][0].disabled
+
+
+def test_ui_alerta_inconsistencia_financeira():
+    from dataclasses import replace
+    from tests.factories import resultado_teste, ingredientes_teste, CUSTO_VACA
+    req = RequisicaoFormulacao(lote_ok(), ingredientes_teste())
+    at = _com_resultado(replace(resultado_teste("candidata_experimental"), custo_vaca_dia=CUSTO_VACA + 5), req)
+    assert any("Inconsistência financeira" in w.value for w in at.warning)

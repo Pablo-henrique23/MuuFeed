@@ -23,7 +23,7 @@ def cenario_demonstrativo(catalogo: CatalogoIngredientes) -> ResultadoFormulacao
         preco = catalogo.precos_ilustrativos.get(info.uid)
         custo = None if preco is None else kg_mn * preco
         total += custo or 0.0
-        itens.append(ItemDieta(info.uid, info.nome_pt, kg_ms, kg_mn, custo))
+        itens.append(ItemDieta(info.uid, info.nome_pt, kg_ms, kg_mn, custo, preco))
     v = saida.get_value
     return ResultadoFormulacao(
         status="demonstracao",

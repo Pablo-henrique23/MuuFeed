@@ -19,13 +19,16 @@ from reportlab.lib.units import mm
 from reportlab.platypus import BaseDocTemplate, Frame, KeepTogether, PageTemplate, Paragraph, Spacer, Table, TableStyle
 
 from models import ESTADOS, PADROES_AVANCADOS, ROTULOS, Ingrediente, Lote, ResultadoFormulacao
+from services.financeiro import DIAS_MES, resumo_financeiro
 from services.formatting import brl, data_br, data_hora_br, num
+from services.rotulos import eh_chave_tecnica, nao_avaliadas_unicas, rotulo_legivel
 
 VERDE, VERDE_ESC = colors.HexColor("#1F6B4F"), colors.HexColor("#17503B")
 TINTA, CINZA, LINHA = colors.HexColor("#14211B"), colors.HexColor("#51625A"), colors.HexColor("#D5E0D8")
 ZEBRA, VERMELHO, AMBAR = colors.HexColor("#F1F6F2"), colors.HexColor("#B42318"), colors.HexColor("#FBF1DC")
-EXPORTAVEIS = {"otimo": "Dieta formulada", "demonstracao": "Cenário demonstrativo"}
-DIAS_MES = 30  # convenção do MuuFeed para o custo mensal
+EXPORTAVEIS = {"otimo": "Dieta formulada", "candidata_experimental": "Dieta candidata experimental",
+               "demonstracao": "Cenário demonstrativo"}
+TEXTO_EXPERIMENTAL = "CANDIDATA EXPERIMENTAL — NÃO É DIETA NUTRICIONALMENTE VALIDADA"
 SITUACAO = {"atende": "Atende", "viola": "Não atende", "nao_avaliado": "Não avaliado",
             "informativo": "Informativo (sem veredito)"}
 
@@ -43,7 +46,7 @@ def _estilos() -> dict[str, ParagraphStyle]:
         "hd": ParagraphStyle("hd", parent=b, fontName="Helvetica-Bold", fontSize=8, leading=10, textColor=colors.white,
                              alignment=TA_RIGHT),
         "lbl": ParagraphStyle("lbl", parent=b, fontSize=7.5, leading=10, textColor=CINZA),
-        "big": ParagraphStyle("big", parent=b, fontName="Helvetica-Bold", fontSize=15, leading=19, textColor=VERDE_ESC),
+        "big": ParagraphStyle("big", parent=b, fontName="Helvetica-Bold", fontSize=13, leading=17, textColor=VERDE_ESC),
         "aviso": ParagraphStyle("aviso", parent=b, fontSize=8.5, leading=11.5, textColor=colors.HexColor("#7A4B00")),
         "demo": ParagraphStyle("demo", parent=b, fontName="Helvetica-Bold", fontSize=9, leading=12, textColor=VERMELHO),
     }
@@ -83,13 +86,14 @@ def _pares(S, pares, larg=(30, 57, 30, 57)) -> Table:
     return t
 
 
-def _metricas(S, itens) -> Table:
-    cel = [[_p(r, S["lbl"]), _p(v, S["big"])] for r, v in itens]
-    t = Table([[c[0] for c in cel], [c[1] for c in cel]], colWidths=[58 * mm] * len(itens))
-    t.setStyle(TableStyle([("BOX", (0, 0), (0, -1), 0.6, LINHA), ("BOX", (1, 0), (1, -1), 0.6, LINHA),
-                           ("BOX", (2, 0), (2, -1), 0.6, LINHA), ("BACKGROUND", (0, 0), (-1, -1), ZEBRA),
-                           ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, 0), 7),
-                           ("BOTTOMPADDING", (0, 1), (-1, 1), 8)]))
+def _metricas(S, itens, largura_mm=174) -> Table:
+    k = len(itens)
+    t = Table([[_p(r, S["lbl"]) for r, _ in itens], [_p(v, S["big"]) for _, v in itens]],
+              colWidths=[largura_mm / k * mm] * k)
+    est = [("BACKGROUND", (0, 0), (-1, -1), ZEBRA), ("LEFTPADDING", (0, 0), (-1, -1), 7),
+           ("TOPPADDING", (0, 0), (-1, 0), 7), ("BOTTOMPADDING", (0, 1), (-1, 1), 8)]
+    est += [("BOX", (j, 0), (j, -1), 0.6, LINHA) for j in range(k)]
+    t.setStyle(TableStyle(est))
     return t
 
 
@@ -111,6 +115,12 @@ def _moldura(c, doc, res, demo, agora) -> None:
     c.setFont("Helvetica", 8)
     c.drawRightString(larg - 18 * mm, alt - 12 * mm, "Gerado em " + data_hora_br(agora))
     c.drawRightString(larg - 18 * mm, alt - 17 * mm, "Formulação: " + (res.id_formulacao or "não identificada"))
+    if res.status == "candidata_experimental":
+        c.setFillColor(VERMELHO)
+        c.rect(0, alt - 32 * mm, larg, 6 * mm, stroke=0, fill=1)
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 8.5)
+        c.drawCentredString(larg / 2, alt - 30 * mm, TEXTO_EXPERIMENTAL)
     c.setStrokeColor(LINHA)
     c.line(18 * mm, 14 * mm, larg - 18 * mm, 14 * mm)
     c.setFillColor(CINZA)
@@ -135,17 +145,21 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
                         agora: Optional[datetime] = None) -> bytes:
     """Gera o PDF. Aceita apenas resultado real (`otimo`) ou o cenário `demonstracao` (com marca d'água)."""
     if resultado.status not in EXPORTAVEIS:
-        raise ValueError("Só é possível exportar uma dieta formulada (status 'otimo') ou o cenário demonstrativo.")
+        raise ValueError("Só é possível exportar dieta formulada (otimo), candidata experimental ou o cenário demonstrativo.")
+    if not resultado.itens:
+        raise ValueError("O formulador não retornou uma dieta: não há o que exportar.")
     demo = resultado.status == "demonstracao"
+    exp = resultado.status == "candidata_experimental"
     agora = agora or datetime.now()
     S = _estilos()
     buf = io.BytesIO()
-    doc = BaseDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=33 * mm,
+    doc = BaseDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=(40 if resultado.status == "candidata_experimental" else 33) * mm,
                           bottomMargin=20 * mm, title="Relatório MuuFeed", author="MuuFeed")
     doc.addPageTemplates([PageTemplate("p", [Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="f")],
                                        onPage=lambda c, d: _moldura(c, d, resultado, demo, agora))])
     por_uid = {i.uid: i for i in (ingredientes or [])}
     n = lote.n_vacas if (lote and not demo) else None
+    resumo = resumo_financeiro(resultado, n, None if demo else ingredientes)
     st_ = [_p(EXPORTAVEIS[resultado.status], S["h1"])]
     if demo:
         st_ += [Table([[_p("EXEMPLO DE LAYOUT. Este documento NÃO é uma dieta formulada pelo MuuFeed e não corresponde "
@@ -153,14 +167,23 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
                       style=[("BOX", (0, 0), (-1, -1), 1, VERMELHO), ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FDECEA")),
                              ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 6),
                              ("BOTTOMPADDING", (0, 0), (-1, -1), 6)])]
-    elif resultado.mensagem:
+    if exp:
+        st_ += [Table([[_p(TEXTO_EXPERIMENTAL, S["demo"])], [_p(
+            "Resultado de um motor experimental: atende apenas às restrições listadas como verificadas. "
+            "Fibra, amido, minerais, vitaminas e limites de inclusão não foram avaliados. Não use para alimentar animais "
+            "sem revisão de um profissional.", S["aviso"])]], colWidths=[doc.width],
+            style=[("BOX", (0, 0), (-1, -1), 1.2, VERMELHO), ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FDECEA")),
+                   ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 5),
+                   ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]), Spacer(1, 4)]
+    if resultado.mensagem and not demo:
         st_.append(_p(resultado.mensagem, S["b"]))
 
     # 1. Identificação
     st_ += [_p("1. Identificação", S["h2"]), _pares(S, [
         ("Formulação", resultado.id_formulacao or "Não identificada"),
         ("Executada em", data_hora_br(resultado.executada_em) if resultado.executada_em else "Não informada"),
-        ("Relatório gerado em", data_hora_br(agora)), ("Modelo de referência", resultado.modelo_referencia or "Não informado")])]
+        ("Relatório gerado em", data_hora_br(agora)), ("Modelo de referência", resultado.modelo_referencia or "Não informado"),
+        ("Situação", EXPORTAVEIS[resultado.status])])]
 
     # 2. Lote
     st_.append(_p("2. Dados do lote", S["h2"]))
@@ -185,45 +208,43 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
                 f"{ROTULOS[k].lower()} = {num(fmt[k], 2)}" for k in padrao) + ".", S["peq"])]
 
     # 3. Dieta
-    st_.append(_p("3. Dieta formulada (por vaca/dia)", S["h2"]))
-    tot_ms, tot_mn = sum(i.kg_ms for i in resultado.itens), sum(i.kg_mn for i in resultado.itens)
-    linhas, ilustr = [], False
-    for i in resultado.itens:
-        ing = por_uid.get(i.uid)
-        preco = "—"
-        if ing and ing.preco_mn_brl_kg is not None:
-            ilu = ing.origem_preco == "ilustrativo"
-            ilustr = ilustr or ilu
-            preco = brl(ing.preco_mn_brl_kg) + (" *" if ilu else "")
-        linhas.append([i.nome, num(i.kg_ms, 2), num(i.kg_mn, 2), num(i.kg_ms / tot_ms * 100, 1, "%") if tot_ms else "—",
-                       preco, brl(i.custo_brl)])
-    linhas.append(["Total", num(tot_ms, 2), num(tot_mn, 2), "100,0 %" if tot_ms else "—", "", brl(resultado.custo_vaca_dia)])
+    st_.append(_p("3. Dieta candidata experimental (por vaca/dia)" if exp else "3. Dieta formulada (por vaca/dia)", S["h2"]))
+    linhas = [[l.nome, num(l.kg_ms, 2), num(l.kg_mn, 2), num(l.pct_ms, 1, "%"),
+               brl(l.preco_mn_brl_kg) + (" *" if l.origem_preco == "ilustrativo" else ""), brl(l.custo_brl)]
+              for l in resumo.linhas]
+    linhas.append(["Total", num(resumo.consumo_ms_kg, 2), num(resumo.consumo_mn_kg, 2), "100,0 %", "", brl(resumo.custo_vaca_dia)])
     st_.append(_tabela(S, ["Ingrediente", "MS (kg)", "MN (kg)", "% da MS", "Preço (R$/kg MN)", "Custo (R$)"],
                        linhas, [58, 20, 20, 20, 30, 26], direita=(1, 2, 3, 4, 5), total=True))
     notas = ["MS = matéria seca; MN = matéria natural (como fornecida). Proporções calculadas sobre a MS total."]
-    if ilustr or demo:
+    if demo or any(l.origem_preco == "ilustrativo" for l in resumo.linhas):
         notas.append("* Preço ilustrativo, não é preço de mercado confirmado.")
-    if any(i.custo_brl is None for i in resultado.itens):
-        notas.append("Custo individual não informado para ao menos um ingrediente.")
+    if any(l.preco_mn_brl_kg is None or l.custo_brl is None for l in resumo.linhas):
+        notas.append("Preço ou custo individual não informado para ao menos um ingrediente.")
     st_ += [Spacer(1, 3)] + [_p(t, S["peq"]) for t in notas]
 
     # 4. Custos
-    st_.append(_p("4. Custos estimados e hipóteses", S["h2"]))
-    c = resultado.custo_vaca_dia
-    st_.append(_metricas(S, [("Por vaca/dia", brl(c)), ("Por lote/dia", brl(c * n) if (c is not None and n) else "Não se aplica"),
-                             ("Por mês (30 dias)", brl(c * n * DIAS_MES) if (c is not None and n) else "Não se aplica")]))
+    st_.append(_p("4. Consumo, custos estimados e hipóteses", S["h2"]))
+    nao = "Não se aplica"
+    st_.append(_metricas(S, [("Consumo de MS (kg MS/vaca/dia)", num(resumo.consumo_ms_kg, 2)),
+                             ("Custo por vaca/dia", brl(resumo.custo_vaca_dia)),
+                             ("Custo por lote/dia", brl(resumo.custo_lote_dia) if resumo.custo_lote_dia is not None else nao),
+                             (f"Custo por mês ({resumo.dias_mes} dias)", brl(resumo.custo_mes) if resumo.custo_mes is not None else nao)]))
     hip = []
     if n:
         hip += [f"Todas as {num(n, 0)} vacas do lote recebem a mesma dieta, na mesma quantidade por vaca.",
-                f"Mês de {DIAS_MES} dias (convenção do MuuFeed)."]
-    if ingredientes:
+                f"Mês de {resumo.dias_mes} dias (convenção do MuuFeed). Custo do lote = custo por vaca/dia × número de vacas; "
+                "custo mensal = custo do lote/dia × dias do mês."]
+    if ingredientes and not demo:
         o = [x.origem_preco for x in ingredientes if x.uid in {i.uid for i in resultado.itens}]
+        sem = len(o) - o.count("ilustrativo") - o.count("informado")
         hip.append(f"Origem dos preços: {o.count('ilustrativo')} ilustrativo(s), {o.count('informado')} informado(s)"
-                   f"{', ' + str(len(o) - o.count('ilustrativo') - o.count('informado')) + ' sem origem' if len(o) > o.count('ilustrativo') + o.count('informado') else ''}.")
+                   + (f", {sem} sem origem." if sem else "."))
         hip.append("Data de referência dos preços: " + data_br(data_ref_precos) + ".")
-    else:
-        hip.append("Preços por ingrediente não disponíveis neste relatório; só o custo informado pelo formulador é exibido.")
+    elif not demo:
+        hip.append("Origem e data dos preços não disponíveis neste relatório; só os valores informados pelo formulador são exibidos.")
     st_ += [Spacer(1, 5)] + _lista(S, hip)
+    for msg in resumo.inconsistencias:
+        st_ += [Spacer(1, 3), _p("Atenção, inconsistência financeira: " + msg, S["aviso"])]
 
     # 5. Ingestão x exigências
     st_.append(_p("5. Ingestão × exigências nutricionais", S["h2"]))
@@ -242,17 +263,28 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
 
     # 6. Restrições
     st_.append(_p("6. Restrições", S["h2"]))
+    sub = ParagraphStyle("sub", parent=S["b"], fontName="Helvetica-Bold", spaceBefore=4, spaceAfter=3)
     tem = False
-    for rot, chave in (("Atendidas", "atendida"), ("Violadas", "violada"), ("Não avaliadas", "nao_avaliada")):
+    for rot, chave in (("Atendidas", "atendida"), ("Violadas", "violada")):
         its = [r for r in resultado.restricoes if r.status == chave]
         if its:
             tem = True
-            st_.append(KeepTogether([_p(rot, ParagraphStyle("sub", parent=S["b"], fontName="Helvetica-Bold", spaceBefore=4, spaceAfter=3)),
-                                     _tabela(S, ["ID", "Restrição", "Detalhe"], [[r.id, r.descricao, r.detalhe or "—"] for r in its], [22, 90, 62])]))
-    if resultado.nao_avaliadas:
+            tecnicas = all(eh_chave_tecnica(r.id) for r in its)  # ids de máquina não vão para o relatório
+            if tecnicas:
+                tab = _tabela(S, ["Restrição", "Detalhe"], [[rotulo_legivel(r.descricao or r.id), r.detalhe or "—"] for r in its], [100, 74])
+            else:
+                tab = _tabela(S, ["ID", "Restrição", "Detalhe"], [[("—" if eh_chave_tecnica(r.id) else r.id),
+                              rotulo_legivel(r.descricao or r.id), r.detalhe or "—"] for r in its], [22, 90, 62])
+            st_.append(KeepTogether([_p(rot, sub), tab]))
+    nao = nao_avaliadas_unicas(resultado)  # restrições + lista de não avaliados, sem repetição
+    if nao:
         tem = True
-        st_ += [_p("Requisitos não avaliados pelo sistema", ParagraphStyle("sub2", parent=S["b"], fontName="Helvetica-Bold", spaceBefore=6, spaceAfter=3))]
-        st_ += _lista(S, resultado.nao_avaliadas)
+        bloco = [_p("Não avaliadas", sub), _p("Requisitos que o sistema ainda não verifica.", S["peq"]), Spacer(1, 2)]
+        if any(d for _, d in nao):
+            bloco.append(_tabela(S, ["Requisito", "Detalhe"], [[r, d or "—"] for r, d in nao], [100, 74]))
+        else:
+            bloco += _lista(S, [r for r, _ in nao])
+        st_.append(KeepTogether(bloco))
     if not tem:
         st_.append(_p("O formulador não informou restrições verificadas nem requisitos não avaliados.", S["b"]))
 
@@ -268,7 +300,8 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
     fontes = [resultado.modelo_referencia or "Modelo de referência não informado pelo formulador.",
               "Composição dos ingredientes: biblioteca de alimentos NASEM (NASEM_feed_library.csv, distribuída com o pacote Python nasem_dairy), sem alteração de valores."]
     fontes += sorted({r.fonte for r in resultado.regras if r.fonte})
-    lim = ["O MuuFeed não declara esta dieta como nutricionalmente completa: só foram verificados os itens listados como atendidos ou violados.",
+    fontes = list(dict.fromkeys(fontes))  # sem fontes repetidas
+    lim = ([TEXTO_EXPERIMENTAL.capitalize() + "."] if exp else []) + ["O MuuFeed não declara esta dieta como nutricionalmente completa: só foram verificados os itens listados como atendidos ou violados.",
            "A composição dos alimentos é a de referência da biblioteca; alimentos reais variam, e recomenda-se análise bromatológica.",
            "Exigências e ingestão referem-se a um animal médio do lote; variações individuais não são consideradas.",
            "Preços marcados como ilustrativos não são preços de mercado confirmados."] + list(resultado.avisos)

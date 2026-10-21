@@ -91,7 +91,8 @@ class NasemFormulador:
         for row in result["diet"]:
             ing = by_name[row["ingredient"]]
             items.append(ItemDieta(ing.uid, ing.nome_pt, row["kg_dm_cow_day"],
-                                   row["kg_as_fed_cow_day"], row["cost_brl_cow_day"]))
+                                   row["kg_as_fed_cow_day"], row["cost_brl_cow_day"],
+                                   row.get("price_brl_kg_as_fed")))
         nutrition = result["nutrition"]
         indicators = [
             Indicador("me", "Energia metabolizável", "Mcal/dia",

@@ -160,6 +160,7 @@ class ItemDieta:
     kg_ms: float
     kg_mn: float
     custo_brl: Optional[float] = None  # R$/vaca/dia
+    preco_mn_brl_kg: Optional[float] = None  # preço unitário usado pelo formulador (R$/kg MN)
 
 
 @dataclass
