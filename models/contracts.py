@@ -136,6 +136,7 @@ def validar_ingredientes(ings: list[Ingrediente]) -> list[str]:
 @dataclass
 class OpcoesFormulacao:
     objetivo: str = "minimizar_custo_vaca_dia"
+    consumo_ms_kg_dia: Optional[float] = None  # Entrada explícita; não é estimativa automática
 
 
 @dataclass
@@ -149,7 +150,7 @@ class RequisicaoFormulacao:
         return asdict(self)
 
 
-STATUS_VALIDOS = {"otimo", "inviavel", "escopo_nao_suportado", "erro", "nao_conectado", "demonstracao"}
+STATUS_VALIDOS = {"otimo", "candidata_experimental", "inviavel", "escopo_nao_suportado", "erro", "nao_conectado", "demonstracao"}
 
 
 @dataclass

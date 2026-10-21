@@ -15,6 +15,7 @@ from ui.theme import banner, brl, card, num
 ROTULO_STATUS = {
     None: "Não calculado", "nao_conectado": "Formulador não conectado",
     "demonstracao": "Cenário demonstrativo (não calculado)", "otimo": "Dieta candidata calculada",
+    "candidata_experimental": "Candidata experimental (avaliação parcial)",
     "inviavel": "Sem solução viável", "escopo_nao_suportado": "Fora do escopo", "erro": "Erro na formulação",
 }
 VERDE, AZUL = "#1F6B4F", "#2B6CB0"
@@ -25,7 +26,7 @@ def pagina_painel() -> None:
     ss, lote, res = st.session_state, st.session_state["lote"], st.session_state["resultado"]
     st.markdown('<div class="mf-hero"><h1>MuuFeed</h1><p>Sistema especialista para formulação inteligente e '
                 'econômica de dietas para bovinos leiteiros.</p></div>', unsafe_allow_html=True)
-    custo = res.custo_vaca_dia if res and res.status == "otimo" else None
+    custo = res.custo_vaca_dia if res and res.status in ("otimo", "candidata_experimental") else None
     cols = st.columns(5)
     with cols[0]:
         card("Lote selecionado", lote.nome if lote else "Não definido", ESTADOS[lote.estado] if lote else "")
@@ -41,7 +42,7 @@ def pagina_painel() -> None:
     n_ing = sum(1 for d in ss["selecionados"].values() if d["disponivel"])
     passos = [("Caracterizar o lote", lote is not None, "Lote"),
               ("Escolher ingredientes e informar preços", n_ing > 0, "Ingredientes e preços"),
-              ("Formular a dieta", bool(res and res.status == "otimo"), "Formular dieta")]
+              ("Formular a dieta", bool(res and res.status in ("otimo", "candidata_experimental")), "Formular dieta")]
     st.subheader("Como formular em três passos")
     for i, (txt, feito, destino) in enumerate(passos):
         c1, c2 = st.columns([5, 1])
@@ -211,7 +212,14 @@ def pagina_formular() -> None:
             st.caption(f"+ {len(disp) - 8} ingrediente(s)")
         if not disp:
             st.warning("Nenhum ingrediente disponível.")
+    # O consumo de MS é informado, não presumido. Campo da formulação experimental.
+    consumo_ms = st.number_input(
+        "Consumo estimado de matéria seca (kg MS/vaca/dia)", min_value=0.1,
+        value=None, step=0.5, format="%.2f", key="form_consumo_ms",
+        help="Obrigatório neste protótipo; deve vir de medição/estimativa técnica do lote, não de valor padrão.")
     req, erros = montar_requisicao()
+    if req is not None:
+        req.opcoes.consumo_ms_kg_dia = consumo_ms
     for e in erros:
         st.error(e)
     if not formulador_conectado():
@@ -232,8 +240,8 @@ def _banner_resultado(res) -> None:
     if res.status == "demonstracao":
         st.markdown(f'<div class="mf-demo">EXEMPLO DE LAYOUT — NÃO É UMA DIETA CALCULADA PELO MUUFEED. {res.mensagem}</div>',
                     unsafe_allow_html=True)
-    elif res.status == "otimo":
-        banner("ok", res.mensagem or "Dieta candidata de menor custo encontrada. Ela atende apenas às restrições "
+    elif res.status in ("otimo", "candidata_experimental"):
+        banner("warn" if res.status == "candidata_experimental" else "ok", res.mensagem or "Dieta candidata de menor custo encontrada. Ela atende apenas às restrições "
                                      "listadas como atendidas; confira as não avaliadas antes de qualquer uso.")
     elif res.status == "inviavel":
         banner("err", res.mensagem or "Não há dieta viável com os ingredientes e restrições informados.")
@@ -245,7 +253,7 @@ def _banner_resultado(res) -> None:
 def _exportar(res) -> None:
     """PDF só para resultado real (otimo) ou para o cenário demonstrativo, com marca d'água."""
     ss = st.session_state
-    if res is not None and res.status in ("otimo", "demonstracao"):
+    if res is not None and res.status in ("otimo", "candidata_experimental", "demonstracao"):
         demo = res.status == "demonstracao"
         req = ss.get("requisicao_resultado")
         lote = None if demo else (req.lote if req else ss["lote"])
@@ -283,7 +291,7 @@ def pagina_resultados() -> None:
         for t in res.nao_avaliadas:
             st.caption(f"Não avaliado: {t}")
         return
-    n = lote.n_vacas if (lote and res.status == "otimo") else None
+    n = lote.n_vacas if (lote and res.status in ("otimo", "candidata_experimental")) else None
     m = st.columns(3)
     m[0].metric("Custo por vaca/dia", brl(res.custo_vaca_dia))
     m[1].metric("Custo do lote/dia", brl(res.custo_vaca_dia * n) if n else "—")
