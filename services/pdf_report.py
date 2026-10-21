@@ -168,10 +168,15 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
                              ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 6),
                              ("BOTTOMPADDING", (0, 0), (-1, -1), 6)])]
     if exp:
+        # Derivado do resultado (não de uma lista fixa): FDN e amido podem estar verificados
+        # quando seus limites opcionais foram informados pelo usuário.
+        pendentes = [nome for nome, _ in nao_avaliadas_unicas(resultado)]
+        descricao_pendencias = ("Requisitos sem limites verificados: " + ", ".join(pendentes) + ". ") if pendentes else ""
+        aviso = ("Resultado experimental: atende somente às restrições efetivamente verificadas. "
+                 + descricao_pendencias
+                 + "Não use para alimentar animais sem revisão de um profissional.")
         st_ += [Table([[_p(TEXTO_EXPERIMENTAL, S["demo"])], [_p(
-            "Resultado de um motor experimental: atende apenas às restrições listadas como verificadas. "
-            "Fibra, amido, minerais, vitaminas e limites de inclusão não foram avaliados. Não use para alimentar animais "
-            "sem revisão de um profissional.", S["aviso"])]], colWidths=[doc.width],
+            aviso, S["aviso"])]], colWidths=[doc.width],
             style=[("BOX", (0, 0), (-1, -1), 1.2, VERMELHO), ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FDECEA")),
                    ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 5),
                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]), Spacer(1, 4)]
@@ -299,7 +304,7 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
     # 7. Regras
     st_.append(_p("7. Regras acionadas pelo motor de inferência", S["h2"]))
     if resultado.regras:
-        st_.append(_tabela(S, ["Regra", "Explicação", "Fonte"], [[r.id, r.descricao, r.fonte or "Não informada"] for r in resultado.regras], [24, 88, 62]))
+        st_.append(_tabela(S, ["Regra", "Explicação", "Fonte"], [[r.id, r.descricao, r.fonte or "Não informada"] for r in resultado.regras], [35, 82, 57]))
     else:
         st_.append(_p("Nenhuma regra acionada foi informada pelo formulador.", S["b"]))
 

@@ -6,7 +6,7 @@ import streamlit as st
 from models import Ingrediente, Lote, RequisicaoFormulacao, validar_ingredientes
 from services.feed_catalog import CatalogoIngredientes
 
-PAGINAS = ["Painel", "Lote", "Ingredientes e preços", "Formular dieta", "Resultados"]
+PAGINAS = ["Painel", "Lote", "Sugestão automática", "Ingredientes e preços", "Formular dieta", "Resultados"]
 
 
 @st.cache_resource(show_spinner="Carregando a biblioteca de ingredientes NASEM…")

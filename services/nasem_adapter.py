@@ -78,7 +78,7 @@ class NasemFormulador:
         result = formulate_diet(FormulationRequest(
             feeds=tuple(choices), animal=animal, equations=equations,
             infusion=infusion, total_dm_kg=total_dm, herd_size=req.lote.n_vacas,
-            max_iterations=80, restarts=2,
+            max_iterations=100, restarts=4,
             min_ndf_pct_dm=req.opcoes.min_ndf_pct_dm,
             max_starch_pct_dm=req.opcoes.max_starch_pct_dm,
         ))
@@ -88,8 +88,26 @@ class NasemFormulador:
         if any(i.origem_preco == "ilustrativo" for i in req.ingredientes):
             warnings += ["Há preços ilustrativos na composição; custos não representam cotação atual."]
         warnings += result.get("solver_messages", [])
+        warnings += result.get("descriptive_alerts", [])
+        diagnostics = result.get("solver_diagnostics", {})
+        if diagnostics:
+            warnings.append(
+                f"Diagnóstico SLSQP: {diagnostics.get('converged_attempts', 0)}/"
+                f"{diagnostics.get('attempts_count', 0)} tentativas convergiram; "
+                f"{diagnostics.get('validated_candidates', 0)} candidatas passaram na verificação. "
+                "O ótimo global não é garantido."
+            )
         unseen = list(result.get("constraints_not_checked", []))
         if result["status"] != "candidata_experimental":
+            if diagnostics.get("diagnostic_note"):
+                warnings.append(diagnostics["diagnostic_note"])
+            gaps = diagnostics.get("closest_candidate_gaps") or {}
+            names_gap = {"total_dm_kg": "diferença MS (kg)", "me_mcal_day": "déficit ME (Mcal/dia)",
+                         "mp_g_day": "déficit MP (g/dia)", "ndf_pct_dm": "déficit FDN (p.p.)",
+                         "starch_pct_dm": "excesso amido (p.p.)", "bounds_dm_kg": "violação de limite (kg MS)"}
+            for key, value in gaps.items():
+                if float(value) > 1e-5:
+                    warnings.append(f"Melhor tentativa avaliada — {names_gap.get(key, key)}: {value:.3f}.")
             return ResultadoFormulacao(
                 status="inviavel", mensagem=("Nenhuma dieta candidata atendeu às restrições "
                      "experimentais. Isso não comprova inviabilidade nutricional."),

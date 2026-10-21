@@ -1,0 +1,16 @@
+MuuFeed — correção pontual do relatório PDF (21/10/2026)
+
+Arquivos modificados:
+- services/pdf_report.py: aviso experimental dinâmico conforme as restrições não verificadas; alarga coluna "Regra" para evitar quebra de R_AMIDO_MAX.
+- tests/test_pdf_report.py: dois testes novos cobrindo situações com e sem limites FDN/amido.
+
+Instalação (na raiz do projeto):
+  git add . && git commit -m "checkpoint: antes do ajuste PDF"
+  unzip -o /caminho/para/muufeed_pdf_fix.zip
+  python -m pytest -q
+  streamlit run app.py
+
+Valide gerando dois novos PDFs: sem limites e com FDN mínima 25%, amido máximo 30%.
+Não modifica formulation_engine.py, nasem_adapter.py, serviços financeiros ou UI.
+
+Neste ambiente, 32 testes de PDF e rótulos passaram. A suíte total depende de nasem_dairy, streamlit e pyarrow locais.

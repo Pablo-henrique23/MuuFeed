@@ -141,3 +141,30 @@ def test_fontes_nao_se_repetem():
                   regras=[__import__("models").RegraAcionada("R-1", "a", "Modelo X"), __import__("models").RegraAcionada("R-2", "b", "Modelo X")])
     t = texto(gerar_relatorio_pdf(res, lote_ok(), ingredientes_teste(), None, AGORA))
     assert t[t.index("8. Fontes e limitações"):].count("Modelo X") == 1
+
+
+def test_aviso_experimental_reflete_limites_nutricionais_ativados():
+    from models import Restricao, RegraAcionada
+    res = replace(resultado_teste("candidata_experimental"),
+        restricoes=[Restricao(k, k.upper(), "atendida") for k in ("total_ms", "me", "mp", "fdn", "amido")] +
+                   [Restricao(k, k.upper(), "nao_avaliada") for k in ("fibra_fisicamente_efetiva", "minerais", "vitaminas")],
+        nao_avaliadas=["fibra_fisicamente_efetiva", "minerais", "vitaminas"],
+        regras=[RegraAcionada("R_AMIDO_MAX", "Amido abaixo do teto", "Limite informado pelo usuário")],
+    )
+    pdf = gerar_relatorio_pdf(res, lote_ok(), ingredientes_teste(), None, AGORA)
+    t = texto(pdf)
+    cabecalho = t[:t.index("1. Identificação")]
+    assert "Fibra, amido, minerais, vitaminas e limites de inclusão não foram avaliados" not in t
+    assert "Requisitos sem limites verificados:" in cabecalho
+    assert "Fibra fisicamente efetiva" in cabecalho and "Minerais" in cabecalho
+    assert "Fibra em detergente neutro (FDN)" not in cabecalho
+    assert "R_AMIDO_MAX" in t
+    assert all(TEXTO_EXPERIMENTAL in pagina for pagina in paginas(pdf))
+
+def test_aviso_sem_limites_identifica_fdn_e_amido_nao_verificados():
+    res = _res_formato_do_motor()
+    pdf = gerar_relatorio_pdf(res, lote_ok(), ingredientes_teste(), None, AGORA)
+    cabecalho = texto(pdf).split("1. Identificação")[0]
+    assert "Fibra em detergente neutro (FDN)" in cabecalho
+    assert "Amido" in cabecalho
+    assert "Requisitos sem limites verificados:" in cabecalho

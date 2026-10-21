@@ -275,29 +275,54 @@ def formulate_diet(
         return float(np.dot(prices, x))
 
     candidates = []
-    for x0 in starts:
+    solver_attempts = []
+    for attempt_id, x0 in enumerate(starts, 1):
         try:
             initial_m = metrics(x0)
             if not all(math.isfinite(v) for v in initial_m):
                 raise ValueError("Indicadores iniciais inválidos")
             res = minimize(objective, x0, method="SLSQP", bounds=bounds, constraints=constraints,
                            options={"maxiter": request.max_iterations, "ftol": 1e-9})
+            solver_attempts.append({
+                "attempt": attempt_id, "converged": bool(res.success),
+                "message": str(res.message), "iterations": int(getattr(res, "nit", 0)),
+                "cost_brl_cow_day": float(objective(res.x)) if np.all(np.isfinite(res.x)) else None,
+            })
             if not res.success:
                 failures.append(f"SLSQP: {res.message}")
             if np.all(np.isfinite(res.x)):
                 candidates.append(np.asarray(res.x, dtype=float))
             candidates.append(x0)
         except Exception as exc:
+            solver_attempts.append({"attempt": attempt_id, "converged": False,
+                                    "message": f"{type(exc).__name__}: {exc}", "iterations": 0,
+                                    "cost_brl_cow_day": None})
             failures.append(f"Falha no cenário inicial: {type(exc).__name__}: {exc}")
 
     # Avaliação independente do retorno `success` do solver — nenhuma folga nutricional.
     valid: list[tuple[float, np.ndarray, tuple[float, ...]]] = []
+    near: list[tuple[float, float, np.ndarray, tuple[float, ...], dict[str, float]]] = []
     for x in candidates:
         try:
             m = metrics(x)
         except Exception as exc:
             failures.append(f"Candidata descartada: {exc}")
             continue
+        gaps = {
+            "total_dm_kg": abs(float(x.sum()) - total),
+            "me_mcal_day": max(0.0, m[1] - m[0]),
+            "mp_g_day": max(0.0, m[3] - m[2]),
+        }
+        if request.min_ndf_pct_dm is not None:
+            gaps["ndf_pct_dm"] = max(0.0, request.min_ndf_pct_dm - percent_dm(x, 'ndf'))
+        if request.max_starch_pct_dm is not None:
+            gaps["starch_pct_dm"] = max(0.0, percent_dm(x, 'starch') - request.max_starch_pct_dm)
+        bounds_gap = max(float(np.max(np.maximum(lower - x, 0))), float(np.max(np.maximum(x - upper, 0))))
+        gaps["bounds_dm_kg"] = bounds_gap
+        score = (gaps["total_dm_kg"] / max(total, 1.0) + gaps["me_mcal_day"] / max(m[1], 1.0)
+                 + gaps["mp_g_day"] / max(m[3], 1.0) + bounds_gap / max(total, 1.0)
+                 + gaps.get("ndf_pct_dm", 0) / 100 + gaps.get("starch_pct_dm", 0) / 100)
+        near.append((score, objective(x), x.copy(), m, gaps))
         if (abs(float(x.sum()) - total) <= 1e-5
                 and np.all(x >= lower - 1e-6) and np.all(x <= upper + 1e-6)
                 and m[0] >= m[1] and m[2] >= m[3]
@@ -319,12 +344,49 @@ def formulate_diet(
             "Limites mínimo/máximo são apenas operacionais informados pelo usuário.",
         ],
         "solver_messages": failures[-10:],
+        "solver_diagnostics": {
+            "algorithm": "SLSQP (otimizacao local)",
+            "attempts": solver_attempts,
+            "attempts_count": len(solver_attempts),
+            "converged_attempts": sum(1 for a in solver_attempts if a["converged"]),
+            "validated_candidates": len(valid),
+            "global_optimum_guaranteed": False,
+        },
         "constraints_checked": ["total_ms", "me", "mp", "limites_operacionais"] + checked_extra,
         "constraints_not_checked": unverified,
     }
     if not valid:
+        if near:
+            _score, _cost, _x, _m, gaps = min(near, key=lambda t: (t[0], t[1]))
+            base["solver_diagnostics"]["closest_candidate_gaps"] = gaps
+            base["solver_diagnostics"]["diagnostic_note"] = (
+                "Nenhuma candidata satisfez todas as restrições verificadas. "
+                "As diferenças abaixo são de uma tentativa aproximada, não comprovam inviabilidade."
+            )
+        else:
+            base["solver_diagnostics"]["diagnostic_note"] = (
+                "Não foi possível avaliar candidatas; verifique dados e mensagens do avaliador NASEM."
+            )
         return base
     cost, x, m = min(valid, key=lambda z: z[0])
+    base["solver_diagnostics"]["best_cost_brl_cow_day"] = float(cost)
+    base["solver_diagnostics"]["validated_costs_brl_cow_day"] = sorted(
+        {round(float(z[0]), 6) for z in valid})
+    # Alertas DESCRITIVOS: números de observação não são limites nutricionais.
+    descriptive_alerts = []
+    portions = x / total
+    idx = int(np.argmax(portions))
+    if portions[idx] >= 0.70:
+        descriptive_alerts.append(
+            f"Composição concentrada: {names[idx]} representa {portions[idx]*100:.1f}% da MS. "
+            "O patamar de 70% é apenas um gatilho de revisão, não uma recomendação nutricional."
+        )
+    if m[0] / m[1] >= 1.20:
+        descriptive_alerts.append(
+            f"Energia calculada em {m[0]/m[1]*100:.1f}% da exigência. "
+            "Gatilho descritivo de 120%, não limite nutricional; revisar composição e hipóteses."
+        )
+    base["descriptive_alerts"] = descriptive_alerts
     rows = []
     for f, dm, qty in zip(feeds, dm_frac, x):
         as_fed = float(qty / dm)

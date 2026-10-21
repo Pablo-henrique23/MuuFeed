@@ -8,6 +8,7 @@ import streamlit as st
 from models import ESTADOS, PADROES_AVANCADOS, Lote
 from services.demo_scenario import cenario_demonstrativo
 from services.financeiro import resumo_financeiro
+from services.ingredient_suggestion import sugerir_ingredientes
 from services.pdf_report import gerar_relatorio_pdf
 from services.rotulos import rotulo_legivel, eh_chave_tecnica, nao_avaliadas_unicas
 from services.formulation_service import executar_formulacao, formulador_conectado
@@ -51,6 +52,8 @@ def pagina_painel() -> None:
         c1.markdown(f"{'✅' if feito else '⬜'} **{i + 1}. {txt}**" + (f" — {n_ing} ingrediente(s)" if i == 1 and n_ing else ""))
         if c2.button("Abrir", key=f"abrir_{i}", use_container_width=True):
             ir_para(destino)
+    if lote and st.button("Sugerir ingredientes automaticamente", type="primary", key="abrir_assistido"):
+        ir_para("Sugestão automática")
     st.caption("Decisões nutricionais são tomadas por código determinístico e base de conhecimento explícita. "
                "Nenhum modelo de linguagem calcula dietas.")
 
@@ -109,6 +112,71 @@ def pagina_lote() -> None:
             st.success(f"Lote salvo. Idade usada pelo formulador: {lote.idade_dias:,.0f} dias.".replace(",", "."))
             for w in avisos:
                 st.warning(w)
+
+
+# ---------------------------------------------------------------- Sugestão assistida
+
+def pagina_sugestao_automatica() -> None:
+    ss, cat = st.session_state, get_catalogo()
+    st.title("Sugestão automática de ingredientes")
+    st.caption("Modo assistido: o MuuFeed propõe ingredientes candidatos para vacas em lactação. "
+               "A seleção não é uma dieta e não garante adequação nutricional. "
+               "Você confirma disponibilidade e preços antes de usar o formulador.")
+    if ss.get("lote") is None:
+        st.warning("Cadastre e salve o lote primeiro.")
+        if st.button("Ir ao lote", key="assistir_lote"):
+            ir_para("Lote")
+        return
+    sugestoes, avisos = sugerir_ingredientes(ss["lote"], cat)
+    for aviso in avisos:
+        st.warning(aviso)
+    if not sugestoes:
+        return
+    st.info("Preços iniciais são ILUSTRATIVOS, não cotações. Alimentos sugeridos não significam que estão "
+            "disponíveis na propriedade. Confirme cada um. Você pode acrescentar outros no modo manual.")
+    linhas = []
+    for sug in sugestoes:
+        atual = ss["selecionados"].get(sug.uid, {})
+        linhas.append({"uid": sug.uid, "Incluir": bool(atual.get("disponivel", True)),
+                       "Ingrediente": sug.nome_pt, "Grupo": sug.grupo,
+                       "Justificativa da sugestão": sug.motivo,
+                       "Preço (R$/kg MN)": atual.get("preco", sug.preco_ilustrativo)})
+    editado = st.data_editor(
+        pd.DataFrame(linhas), hide_index=True, use_container_width=True, key="sugestao_editor",
+        disabled=["uid", "Ingrediente", "Grupo", "Justificativa da sugestão"],
+        column_config={"uid": None, "Incluir": st.column_config.CheckboxColumn("Disponível e incluir"),
+                       "Preço (R$/kg MN)": st.column_config.NumberColumn(min_value=0.0, format="%.2f")})
+    st.caption("A coluna 'Disponível e incluir' requer confirmação do produtor; preços podem ser editados aqui "
+               "ou na tela Ingredientes e preços. A lista final é somente um conjunto candidato.")
+    if ss["selecionados"]:
+        st.warning("Você já possui ingredientes selecionados. Ao confirmar, a lista atual será SUBSTITUÍDA "
+                   "pelos candidatos marcados; os preços previamente editados desses mesmos alimentos são preservados.")
+    confirmar = st.checkbox("Confirmei a disponibilidade dos ingredientes marcados e revisei seus preços.",
+                            key="assistido_confirma")
+    if st.button("Usar ingredientes confirmados", type="primary", disabled=not confirmar):
+        novos = {}
+        for _, linha in editado.iterrows():
+            if not bool(linha["Incluir"]):
+                continue
+            uid = linha["uid"]
+            preco = linha["Preço (R$/kg MN)"]
+            if pd.isna(preco) or float(preco) <= 0:
+                st.error(f"Informe um preço positivo para {linha['Ingrediente']} antes de continuar.")
+                return
+            anterior = ss["selecionados"].get(uid, {})
+            sug = next(s for s in sugestoes if s.uid == uid)
+            preco = float(preco)
+            origem = (anterior.get("origem", "") if preco == anterior.get("preco") else
+                      "ilustrativo" if preco == sug.preco_ilustrativo else "informado")
+            novos[uid] = {"preco": preco, "origem": origem or "informado", "disponivel": True,
+                           "min_mn": anterior.get("min_mn"), "max_mn": anterior.get("max_mn")}
+        if len(novos) < 2:
+            st.error("Confirme pelo menos dois ingredientes candidatos para tentar a formulação.")
+            return
+        ss["selecionados"] = novos
+        ss["resultado"] = None
+        ss["requisicao_resultado"] = None
+        ir_para("Ingredientes e preços")
 
 
 # ---------------------------------------------------------------- Ingredientes
