@@ -246,20 +246,28 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
     for msg in resumo.inconsistencias:
         st_ += [Spacer(1, 3), _p("Atenção, inconsistência financeira: " + msg, S["aviso"])]
 
-    # 5. Ingestão x exigências
-    st_.append(_p("5. Ingestão × exigências nutricionais", S["h2"]))
+    # 5. Ingestão e indicadores nutricionais — limites de composição têm direção própria.
+    st_.append(_p("5. Ingestão e indicadores nutricionais", S["h2"]))
     if resultado.indicadores:
-        lin = []
+        linhas = []
         for i in resultado.indicadores:
-            ok = i.ingerido is not None and i.exigido
-            lin.append([i.rotulo, i.unidade, num(i.ingerido, 2) if i.ingerido is not None else "Não disponível",
-                        num(i.exigido, 2) if i.exigido is not None else "Não disponível",
-                        num(i.ingerido / i.exigido * 100, 1, "%") if ok else "—", SITUACAO.get(i.status, i.status)])
-        st_.append(_tabela(S, ["Indicador", "Unidade", "Ingerido", "Exigido", "Ingerido ÷ exigido", "Situação"], lin,
-                           [42, 20, 24, 24, 30, 34], direita=(2, 3, 4)))
-        st_.append(_p("Somente indicadores efetivamente calculados pelo formulador são exibidos. 'Informativo' não é veredito de adequação.", S["peq"]))
+            direcao = ("Mínimo" if i.chave == "fdn" else
+                       "Máximo" if i.chave == "amido" else "Exigência")
+            limite = (f"{direcao}: {num(i.exigido, 2)}" if i.exigido is not None
+                      else "Não configurado" if i.chave in ("fdn", "amido") else "Não disponível")
+            razao = (num(i.ingerido / i.exigido * 100, 1, "%")
+                     if i.chave in ("me", "mp") and i.ingerido is not None
+                     and i.exigido is not None and i.exigido > 0 else "—")
+            linhas.append([i.rotulo, i.unidade,
+                           num(i.ingerido, 2) if i.ingerido is not None else "Não disponível",
+                           limite, razao, SITUACAO.get(i.status, i.status)])
+        st_.append(_tabela(S, ["Indicador", "Unidade", "Valor", "Limite", "Valor / exigência", "Situação"],
+                           linhas, [42, 20, 24, 35, 26, 27], direita=(2, 4)))
+        st_.append(_p("FDN e amido são expressos em percentual da matéria seca. Limites opcionais são "
+                       "informados pelo usuário, não são recomendações automáticas do NASEM. "
+                       "Sem limite, o valor é apenas informativo.", S["peq"]))
     else:
-        st_.append(_p("O formulador não informou indicadores de ingestão e exigência.", S["b"]))
+        st_.append(_p("O formulador não informou indicadores nutricionais.", S["b"]))
 
     # 6. Restrições
     st_.append(_p("6. Restrições", S["h2"]))

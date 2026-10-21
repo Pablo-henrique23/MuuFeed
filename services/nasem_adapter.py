@@ -2,8 +2,7 @@
 
 Ativação: MUUFEED_FORMULADOR=services.nasem_adapter:NasemFormulador
 Requer `req.opcoes.consumo_ms_kg_dia` informado pelo usuário, em kg MS/vaca/dia.
-Enquanto fibras, amido e minerais não forem incorporados, o resultado é
-explicitamente uma CANDIDATA EXPERIMENTAL.
+FDN e amido podem ser limitados pelo usuário, mas a candidata permanece experimental.
 """
 from __future__ import annotations
 
@@ -38,6 +37,15 @@ class NasemFormulador:
         if any(i.preco_mn_brl_kg is None or i.preco_mn_brl_kg <= 0 or
                not 0 < i.ms_pct <= 100 for i in req.ingredientes):
             return False, "Todos os ingredientes devem ter preço positivo e MS válida."
+        for campo, rotulo in (("min_ndf_pct_dm", "FDN mínima"), ("max_starch_pct_dm", "Amido máximo")):
+            valor = getattr(req.opcoes, campo, None)
+            if valor is not None:
+                try:
+                    n = float(valor)
+                except (TypeError, ValueError):
+                    return False, f"{rotulo} deve ser numérico."
+                if not math.isfinite(n) or not 0 <= n <= 100:
+                    return False, f"{rotulo} deve estar entre 0 e 100% da MS."
         return True, ""
 
     def formular(self, req):
@@ -71,6 +79,8 @@ class NasemFormulador:
             feeds=tuple(choices), animal=animal, equations=equations,
             infusion=infusion, total_dm_kg=total_dm, herd_size=req.lote.n_vacas,
             max_iterations=80, restarts=2,
+            min_ndf_pct_dm=req.opcoes.min_ndf_pct_dm,
+            max_starch_pct_dm=req.opcoes.max_starch_pct_dm,
         ))
         warnings = list(result.get("warnings", []))
         warnings += ["Cenário NASEM utiliza parâmetros complementares do exemplo oficial; "
@@ -100,14 +110,30 @@ class NasemFormulador:
             Indicador("mp", "Proteína metabolizável", "g/dia",
                       nutrition["mp_intake_g_day"], nutrition["mp_requirement_g_day"], "atende"),
         ]
+        comp = result.get("nutrient_composition") or {}
+        for key, label, amount_key, limit_key in (
+            ("fdn", "Fibra em detergente neutro (FDN)", "ndf_pct_dm", "ndf_min_pct_dm"),
+            ("amido", "Amido", "starch_pct_dm", "starch_max_pct_dm"),
+        ):
+            value, limit = comp.get(amount_key), comp.get(limit_key)
+            if value is not None and math.isfinite(float(value)):
+                # Nenhum limite: valor apenas informativo, nunca "atende".
+                status = "informativo" if limit is None else (
+                    "atende" if (float(value) >= float(limit) - 1e-6 if key == "fdn"
+                                else float(value) <= float(limit) + 1e-6) else "viola")
+                indicators.append(Indicador(key, label, "% da MS", float(value),
+                                            None if limit is None else float(limit), status))
         checked = list(result.get("constraints_checked", []))
+        checked_labels = {"total_ms": "MS", "me": "ME", "mp": "MP", "fdn": "FDN", "amido": "amido"}
+        verified = ", ".join(checked_labels[k] for k in checked if k in checked_labels)
+        rules = [RegraAcionada(r["id"], r["explanation"], r.get("source") or
+                               "NASEM 2021 via nasem_dairy") for r in result.get("activated_rules", [])]
         return ResultadoFormulacao(
             status="candidata_experimental",
-            mensagem="CANDIDATA EXPERIMENTAL: satisfaz apenas MS, ME e MP verificadas; não é dieta completa.",
+            mensagem=f"CANDIDATA EXPERIMENTAL: restrições verificadas: {verified or 'nenhuma'}; não é dieta nutricionalmente completa.",
             itens=items, custo_vaca_dia=result["cost_brl_cow_day"],
             indicadores=indicators,
-            regras=[RegraAcionada(r["id"], r["explanation"], "NASEM 2021 via nasem_dairy")
-                    for r in result.get("activated_rules", [])],
+            regras=rules,
             restricoes=([Restricao(k, k.upper(), "atendida") for k in checked] +
                         [Restricao(k, k.upper(), "nao_avaliada") for k in unseen]),
             nao_avaliadas=unseen,

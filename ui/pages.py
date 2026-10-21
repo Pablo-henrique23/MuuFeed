@@ -9,6 +9,7 @@ from models import ESTADOS, PADROES_AVANCADOS, Lote
 from services.demo_scenario import cenario_demonstrativo
 from services.financeiro import resumo_financeiro
 from services.pdf_report import gerar_relatorio_pdf
+from services.rotulos import rotulo_legivel, eh_chave_tecnica, nao_avaliadas_unicas
 from services.formulation_service import executar_formulacao, formulador_conectado
 from ui.state import adicionar, get_catalogo, ir_para, montar_requisicao
 from ui.theme import banner, brl, card, num
@@ -218,9 +219,23 @@ def pagina_formular() -> None:
         "Consumo estimado de matéria seca (kg MS/vaca/dia)", min_value=0.1,
         value=None, step=0.5, format="%.2f", key="form_consumo_ms",
         help="Obrigatório neste protótipo; deve vir de medição/estimativa técnica do lote, não de valor padrão.")
+    st.markdown("**Restrições opcionais de composição (% da matéria seca)**")
+    st.caption("Sem valor informado, FDN e amido são calculados apenas como indicadores informativos. "
+               "Valores digitados são definidos pelo usuário, não recomendações automáticas NASEM.")
+    col_fdn, col_amido = st.columns(2)
+    limite_fdn = col_fdn.number_input(
+        "FDN mínima (% da MS)", min_value=0.0, max_value=100.0, value=None,
+        step=0.5, format="%.2f", key="form_fdn_min",
+        help="Opcional; use somente um limite tecnicamente justificado para o seu lote.")
+    limite_amido = col_amido.number_input(
+        "Amido máximo (% da MS)", min_value=0.0, max_value=100.0, value=None,
+        step=0.5, format="%.2f", key="form_amido_max",
+        help="Opcional; use somente um limite tecnicamente justificado para o seu lote.")
     req, erros = montar_requisicao()
     if req is not None:
         req.opcoes.consumo_ms_kg_dia = consumo_ms
+        req.opcoes.min_ndf_pct_dm = limite_fdn
+        req.opcoes.max_starch_pct_dm = limite_amido
     for e in erros:
         st.error(e)
     if not formulador_conectado():
@@ -292,8 +307,8 @@ def pagina_resultados() -> None:
         return
     _banner_resultado(res)
     if not res.itens:
-        for t in res.nao_avaliadas:
-            st.caption(f"Não avaliado: {t}")
+        for label, _ in nao_avaliadas_unicas(res):
+            st.caption(f"Não avaliado: {label}")
         return
     req = ss.get("requisicao_resultado")
     lote_ref = req.lote if req else lote  # mesma fonte do PDF: o lote usado na formulação
@@ -323,34 +338,53 @@ def pagina_resultados() -> None:
                           yaxis=dict(autorange="reversed"), xaxis_title="% da matéria seca", plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, use_container_width=True)
     with t2:
-        par = [i for i in res.indicadores if i.ingerido is not None and i.exigido]
-        if par:
-            cols = st.columns(len(par))
-            for c, i in zip(cols, par):
-                c.metric(i.rotulo, num(i.ingerido, 1, i.unidade), f"exigido: {num(i.exigido, 1, i.unidade)}", delta_color="off")
-            fig = go.Figure(go.Bar(x=[i.rotulo for i in par], y=[i.ingerido / i.exigido * 100 for i in par], marker_color=AZUL))
-            fig.add_hline(y=100, line_dash="dash", annotation_text="exigido = 100%")
-            fig.update_layout(title="Ingerido ÷ exigido (%)", height=320, margin=dict(l=0, r=10, t=40, b=0),
-                              plot_bgcolor="rgba(0,0,0,0)")
-            st.plotly_chart(fig, use_container_width=True)
+        if res.indicadores:
+            rows = []
+            for i in res.indicadores:
+                limite = ("Mínimo" if i.chave == "fdn" else "Máximo" if i.chave == "amido"
+                          else "Exigência")
+                rows.append({"Indicador": i.rotulo, "Valor": i.ingerido, "Unidade": i.unidade,
+                             "Tipo de limite": limite if i.exigido is not None else "—",
+                             "Limite": i.exigido,
+                             "Situação": {"atende": "Atende", "viola": "Não atende",
+                                          "informativo": "Informativo (sem limite)",
+                                          "nao_avaliado": "Não avaliado"}.get(i.status, i.status)})
+            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+            # Comparação ingerido/exigido é válida para ME e MP. Limites máximo/mínimo
+            # de amido/FDN têm outra semântica e não devem entrar no gráfico de 100%.
+            par = [i for i in res.indicadores if i.chave in ("me", "mp")
+                   and i.ingerido is not None and i.exigido is not None and i.exigido > 0]
+            if par:
+                fig = go.Figure(go.Bar(x=[i.rotulo for i in par],
+                                       y=[i.ingerido / i.exigido * 100 for i in par], marker_color=AZUL))
+                fig.add_hline(y=100, line_dash="dash", annotation_text="exigido = 100%")
+                fig.update_layout(title="Ingerido ÷ exigido (ME e MP)", height=320,
+                                  margin=dict(l=0, r=10, t=40, b=0), plot_bgcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("O formulador não devolveu indicadores com valores ingerido e exigido.")
-        st.caption("Indicadores informativos não constituem veredito de adequação.")
+            st.info("O formulador não devolveu indicadores nutricionais.")
+        st.caption("FDN e amido sem limites configurados são informativos, não vereditos nutricionais.")
     with t3:
         if res.regras:
             st.markdown("**Regras do sistema especialista acionadas**")
-            st.dataframe(pd.DataFrame([vars(r) for r in res.regras]), hide_index=True, use_container_width=True)
+            st.dataframe(pd.DataFrame([{"ID": r.id, "Explicação": r.descricao, "Fonte": r.fonte}
+                                       for r in res.regras]), hide_index=True, use_container_width=True)
         else:
             st.info("Nenhuma regra acionada informada pelo formulador.")
-        for rot, st_ in (("Restrições atendidas", "atendida"), ("Restrições violadas", "violada"), ("Restrições não avaliadas", "nao_avaliada")):
-            itens = [r for r in res.restricoes if r.status == st_]
+        for rot, status in (("Restrições atendidas", "atendida"), ("Restrições violadas", "violada")):
+            itens = [r for r in res.restricoes if r.status == status]
             if itens:
                 st.markdown(f"**{rot}**")
-                st.dataframe(pd.DataFrame([vars(r) for r in itens]).drop(columns="status"), hide_index=True, use_container_width=True)
-        if res.nao_avaliadas:
-            st.markdown("**Itens não avaliados**")
-            for t in res.nao_avaliadas:
-                st.write(f"• {t}")
+                st.dataframe(pd.DataFrame([{"ID": r.id if not eh_chave_tecnica(r.id) else "—",
+                                           "Restrição": rotulo_legivel(r.descricao or r.id),
+                                           "Detalhe": r.detalhe or "—"} for r in itens]),
+                             hide_index=True, use_container_width=True)
+        pendentes = nao_avaliadas_unicas(res)
+        if pendentes:
+            st.markdown("**Restrições não avaliadas**")
+            st.dataframe(pd.DataFrame([{"Requisito": titulo, "Detalhe": detalhe or "—"}
+                                       for titulo, detalhe in pendentes]),
+                         hide_index=True, use_container_width=True)
     with t4:
         for a in res.avisos:
             st.warning(a)

@@ -137,6 +137,8 @@ def validar_ingredientes(ings: list[Ingrediente]) -> list[str]:
 class OpcoesFormulacao:
     objetivo: str = "minimizar_custo_vaca_dia"
     consumo_ms_kg_dia: Optional[float] = None  # Entrada explícita; não é estimativa automática
+    min_ndf_pct_dm: Optional[float] = None  # Limite opcional definido pelo usuário, % da MS
+    max_starch_pct_dm: Optional[float] = None  # Limite opcional definido pelo usuário, % da MS
 
 
 @dataclass
