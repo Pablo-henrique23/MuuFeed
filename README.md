@@ -119,3 +119,13 @@ python scripts/verificar_raca_generica.py
 Se retornar erro, utilize Holandesa/Jersey no cenário principal e registre a limitação. Mesmo passando, mantenha a indicação experimental.
 
 [Checklist final](docs/CHECKLIST_ENTREGA.md) • [Casos de teste](docs/CASOS_DE_TESTE.md)
+
+### Sódio e ausência de candidata — atualização v16
+
+Ativar a restrição de **sódio absorvido** pode impedir a obtenção de candidata
+quando o conjunto escolhido não contém uma fonte capaz de fornecer o mineral.
+Nesse caso, o MuuFeed alerta a ausência de fonte concentrada reconhecida e
+permite rever os ingredientes. O sal é **opcional**, requer confirmação de
+preço, disponibilidade e teto por responsável técnico e não é prescrito.
+Os aspectos não avaliados exibidos no resultado são **limitações de escopo**;
+não devem ser lidos como causa automática da ausência de candidata.

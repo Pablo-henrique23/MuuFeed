@@ -12,6 +12,7 @@ from services.dmi_estimator import estimar_do_lote
 from services.demo_scenario import cenario_demonstrativo
 from services.financeiro import resumo_financeiro
 from services.ingredient_suggestion import sugerir_ingredientes
+from services.sodium_guidance import aviso_fonte_sodio
 from services.pdf_report import gerar_relatorio_pdf
 from services.rotulos import rotulo_legivel, eh_chave_tecnica, nao_avaliadas_unicas
 from services.formulation_service import executar_formulacao, formulador_conectado
@@ -193,7 +194,7 @@ def pagina_sugestao_automatica() -> None:
              "Essas alternativas começam desmarcadas e precisam de confirmação.")
     incluir_fonte_sodio = st.checkbox(
         "Incluir sal (cloreto de sódio) como ingrediente candidato opcional",
-        value=False, key="assistido_sodio",
+        value=bool(ss.get("form_sodio_abs", False)), key="assistido_sodio",
         help="O ingrediente consta na biblioteca NASEM; seu uso exige confirmar disponibilidade, "
              "preço e um máximo operacional definido por responsável técnico. "
              "Não é uma prescrição ou quantidade recomendada.")
@@ -443,6 +444,15 @@ def pagina_formular() -> None:
         help="Exige oferta absorvida de Na >= exigência retornada pelo NASEM. "
              "Para permitir correção, confirme uma fonte de Na disponível com preço e máximo informados. "
              "Não verifica excessos nem garante qualidade nutricional completa.")
+    # Verificação de disponibilidade: não afirma inviabilidade nem impõe suplemento.
+    sodium_warning = aviso_fonte_sodio(
+        [cat.obter(uid).nome_original for uid, dados in ss.get("selecionados", {}).items()
+         if dados.get("disponivel")], exigir_sodio=exigir_na)
+    if sodium_warning:
+        st.warning(sodium_warning)
+        if st.button("Revisar ingredientes e avaliar fonte de sódio", key="revisar_fonte_sodio"):
+            ss["assistido_sodio"] = True
+            ir_para("Sugestão automática")
     exigir_mg_cl_k = st.checkbox(
         "Exigir magnésio, cloro e potássio ABSORVIDOS (NASEM, experimental)",
         value=False, key="form_mg_cl_k_abs",
@@ -668,8 +678,14 @@ def pagina_resultados() -> None:
         st.caption("Esta formulação não substitui a avaliação de médico-veterinário ou zootecnista. "
                    "Confira os requisitos não avaliados antes de qualquer aplicação prática.")
     if not res.itens:
+        if res.status == "inviavel":
+            st.caption("Aspectos não avaliados: itens fora da cobertura completa deste protótipo. "
+                       "Eles NÃO são, por si, a causa da ausência de candidata. "
+                       "Confira as restrições ativas e os avisos abaixo.")
+            for aviso in res.avisos:
+                st.warning(aviso)
         for label, _ in nao_avaliadas_unicas(res):
-            st.caption(f"Não avaliado: {label}")
+            st.caption(f"Aspecto não avaliado: {label}")
         return
     req = ss.get("requisicao_resultado")
     lote_ref = req.lote if req else lote  # mesma fonte do PDF: o lote usado na formulação
@@ -692,6 +708,8 @@ def pagina_resultados() -> None:
         graf = df.iloc[:-1]
         st.dataframe(df, hide_index=True, use_container_width=True, column_config={
             c: st.column_config.NumberColumn(format="%.2f") for c in df.columns[1:]})
+        st.caption("Preço (R$/kg MN) é unitário e não deve ser somado. O total da dieta é a soma da coluna "
+                   "Custo (R$/vaca/dia).")
         tot_ms = resumo.consumo_ms_kg
         fig = go.Figure(go.Bar(x=graf["kg MS/vaca/dia"] / tot_ms * 100, y=graf["Ingrediente"], orientation="h",
                                marker_color=VERDE, hovertemplate="%{y}: %{x:.1f}% da MS<extra></extra>"))

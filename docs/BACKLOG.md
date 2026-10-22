@@ -76,3 +76,13 @@ O status deve continuar **candidata experimental**. O projeto calcula apenas as 
 - [x] Na seção 7, simplificar fontes para `NASEM 2021` e `NASEM 2021 + usuário`.
 - [x] Na seção 8, distinguir teores de referência da biblioteca de alimentos das restrições operacionais informadas pelo usuário.
 - [ ] Rodar a auditoria e a suíte completa na instalação local, gerar novo PDF e conferir a seção 7 visualmente.
+
+## Revisão v16 — entrega do hackathon
+
+- [x] Mostrar aviso contextual quando exigência de sódio absorvido estiver ativa sem fonte concentrada reconhecida.
+- [x] Atalho da formulação para rever a sugestão, sem inclusão automática de suplemento e sem inventar dose.
+- [x] Distinguir aspectos nutricionais não avaliados de causas prováveis de não encontrar candidata.
+- [x] Especificar na coluna Fonte do PDF: “NASEM 2021; limite do usuário”.
+- [ ] Executar suíte completa no ambiente do usuário com `nasem_dairy`, `streamlit` e `pyarrow`.
+- [ ] Validar com dados reais o efeito da fonte de sódio e restrição máxima na candidata.
+- [ ] **Destinação econômica adicional**: modelar e validar categoria animal diferente (ex.: novilhas de reposição ou vacas secas). Não confundir destinação comercial com estado fisiológico e não declarar suporte fictício na entrega.

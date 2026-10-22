@@ -13,6 +13,7 @@ from models import (Indicador, ItemDieta, RegraAcionada, Restricao,
 from formulation_engine import FeedChoice, FormulationRequest, formulate_diet
 from services.breed import para_raca_nasem, utiliza_raca_generica, AVISO_RACA_GENERICA
 from services.feed_science import eh_so_bezerro, limite_explicito_obrigatorio
+from services.sodium_guidance import aviso_fonte_sodio
 
 
 class NasemFormulador:
@@ -171,6 +172,9 @@ class NasemFormulador:
                 )
         unseen = list(result.get("constraints_not_checked", []))
         if result["status"] != "candidata_experimental":
+            aviso_na = aviso_fonte_sodio(req.ingredientes, exigir_sodio=getattr(req.opcoes, "require_absorbed_na", False))
+            if aviso_na:
+                warnings.insert(0, aviso_na)
             if diagnostics.get("diagnostic_note"):
                 warnings.append(diagnostics["diagnostic_note"])
             gaps = diagnostics.get("closest_candidate_gaps") or {}
@@ -180,9 +184,14 @@ class NasemFormulador:
             for key, value in gaps.items():
                 if float(value) > 1e-5:
                     warnings.append(f"Melhor tentativa avaliada — {names_gap.get(key, key)}: {value:.3f}.")
+            mensagem_inviavel = ("Nenhuma dieta candidata atendeu às restrições experimentais. "
+                                 "Isso não comprova inviabilidade nutricional.")
+            if aviso_na:
+                mensagem_inviavel += (" Atenção: sódio absorvido foi exigido, mas não há "
+                                      "fonte concentrada de sódio identificada no conjunto selecionado. "
+                                      "Revise os ingredientes e seus limites antes de repetir a busca.")
             return ResultadoFormulacao(
-                status="inviavel", mensagem=("Nenhuma dieta candidata atendeu às restrições "
-                     "experimentais. Isso não comprova inviabilidade nutricional."),
+                status="inviavel", mensagem=mensagem_inviavel,
                 nao_avaliadas=unseen, avisos=warnings,
                 modelo_referencia=result.get("model", "NASEM 2021"),
             )

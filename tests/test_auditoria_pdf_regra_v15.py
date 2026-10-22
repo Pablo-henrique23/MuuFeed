@@ -88,7 +88,7 @@ def test_regras_ativas_numeros_reais_e_fontes_simplificadas_no_pdf():
         'FDN de forragens: 35,23% MS >= 19,00% MS',
         'FDN: 41,41% MS >= 25,00% MS',
         'Amido: 20,79% MS <= 30,00% MS',
-        'NASEM 2021 + usuário',
+        'NASEM 2021; limite do usuário',
     ]:
         assert chunk in rules_text, chunk
     assert 'calculada no NASEM' not in rules_text

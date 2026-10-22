@@ -40,7 +40,7 @@ SITUACAO = {"atende": "Atende", "viola": "Não atende", "nao_avaliado": "Não av
 def _fonte_legivel(fonte: str) -> str:
     t = str(fonte or '').strip()
     if t.startswith('Limite informado pelo usuário; composição NASEM'):
-        return 'NASEM 2021 + usuário'
+        return 'NASEM 2021; limite do usuário'
     if t.startswith('NASEM 2021 via nasem_dairy'):
         return t.replace('NASEM 2021 via nasem_dairy', 'NASEM 2021', 1)
     return t or 'Não informada'
@@ -382,7 +382,7 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
     # Outras fontes técnicas específicas podem ser preservadas, mas nomes
     # compostos já estão explicados acima e não são documentos independentes.
     extras = {_fonte_legivel(r.fonte) for r in resultado.regras if r.fonte}
-    fontes += sorted(extras - {'NASEM 2021 + usuário', 'NASEM 2021', 'Usuário'})
+    fontes += sorted(extras - {'NASEM 2021; limite do usuário', 'NASEM 2021', 'Usuário'})
     fontes = list(dict.fromkeys(fontes))  # sem fontes repetidas
     lim = ([TEXTO_EXPERIMENTAL.capitalize() + "."] if exp else []) + [AVISO_PROFISSIONAL, "O MuuFeed não declara esta dieta como nutricionalmente completa: só foram verificados os itens listados como atendidos ou violados.",
            "A composição dos alimentos é a de referência da biblioteca; alimentos reais variam, e recomenda-se análise bromatológica.",
