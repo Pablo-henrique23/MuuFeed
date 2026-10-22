@@ -23,6 +23,9 @@ ROTULOS = {
     "calcio_absorvido": "Cálcio absorvido (NASEM)",
     "fosforo_absorvido": "Fósforo absorvido (NASEM)",
     "sodio_absorvido": "Sódio absorvido (NASEM)",
+    "magnesio_absorvido": "Magnésio absorvido (NASEM)",
+    "cloro_absorvido": "Cloro absorvido (NASEM)",
+    "potassio_absorvido": "Potássio absorvido (NASEM)",
     "vitaminas": "Vitaminas",
     "limites_nutricionais_de_inclusao": "Limites nutricionais de inclusão de ingredientes",
 }

@@ -7,7 +7,7 @@ por vaca/dia; a matéria natural (MN) é derivada pelo teor de MS do alimento.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
-from services.breed import para_raca_nasem
+from services.breed import para_raca_nasem, utiliza_raca_generica, AVISO_RACA_GENERICA
 from typing import Optional
 
 DIAS_POR_ANO = 365.25   # constantes de conversão de unidade, não são parâmetros nutricionais
@@ -54,6 +54,7 @@ class Lote:
     lactose_pct: float = PADROES_AVANCADOS["lactose_pct"]
     peso_maduro_kg: float = PADROES_AVANCADOS["peso_maduro_kg"]
     dias_gestacao: int = PADROES_AVANCADOS["dias_gestacao"]
+    raca_descricao: str = ""  # nome informado; não altera o ramo genérico Other
 
     @property
     def idade_dias(self) -> float:
@@ -79,6 +80,11 @@ class Lote:
                 shown = (f"{lo/DIAS_POR_ANO:.0f} a {hi/DIAS_POR_ANO:.0f} anos"
                          if campo == "idade_dias" else f"{lo} a {hi} {un}".strip())
                 erros.append(f"{ROTULOS[campo]} fora do intervalo plausível ({shown}).")
+        try:
+            if utiliza_raca_generica(self.raca):
+                avisos.append(AVISO_RACA_GENERICA)
+        except ValueError as exc:
+            erros.append(str(exc))
         if self.peso_maduro_kg < self.peso_kg:
             avisos.append("O peso à maturidade é menor que o peso atual; confira os dois valores.")
         if self.campos_padrao:
@@ -144,6 +150,7 @@ class OpcoesFormulacao:
     min_forage_ndf_pct_dm: Optional[float] = None  # FDN de forragem opcional, % da MS
     require_absorbed_ca_p: bool = False  # opcional: duas restrições adicionais calculadas pelo NASEM
     require_absorbed_na: bool = False  # opcional: exigência de sódio ABSORVIDO pelo NASEM
+    require_absorbed_mg_cl_k: bool = False  # opcional: Mg, Cl e K absorvidos/exigidos NASEM
     consumo_ms_origem: str = "informado"  # "informado" ou "estimado_nrc2001"; documentar hipótese
     max_share_ingredient_pct_dm: Optional[float] = None  # teto operacional do usuário, NÃO limite nutricional
 

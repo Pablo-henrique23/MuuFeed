@@ -43,9 +43,13 @@ def test_mapeamentos_apontam_para_ingredientes_existentes(cat):
     assert len(cat.precos_ilustrativos) == len(precos)
 
 
-def test_sem_traducao_mantem_nome_original(cat):
-    sem = cat.tabela[~cat.tabela["traduzido"]]
-    assert len(sem) > 0 and (sem["nome_pt"] == sem["nome_original"]).all()
+def test_catalogo_completo_tem_traducao_pt(cat):
+    # A auditoria de 22/10 apontava 90 pendentes; agora todos têm rótulo PT.
+    assert len(cat.tabela) == 284
+    assert cat.tabela["traduzido"].all()
+    assert cat.tabela["nome_pt"].str.len().gt(0).all()
+    # Identificador original permanece intacto para o motor.
+    assert cat.tabela["nome_original"].notna().all()
 
 
 def test_composicao_marca_ausentes_como_none(cat):

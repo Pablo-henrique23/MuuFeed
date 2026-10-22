@@ -7,6 +7,7 @@ import streamlit as st
 
 from models import ESTADOS, PADROES_AVANCADOS, Lote
 from services.diet_analysis import analisar_dieta
+from services.breed import RACA_GENERICA, AVISO_RACA_GENERICA
 from services.dmi_estimator import estimar_do_lote
 from services.demo_scenario import cenario_demonstrativo
 from services.financeiro import resumo_financeiro
@@ -61,14 +62,14 @@ def pagina_painel() -> None:
 
 
 # ---------------------------------------------------------------- Lote
-CAMPOS_FORM = {"f_nome": "", "f_n": 50, "f_raca": "Holandesa", "f_idade": 4.0, "f_idade_un": "anos", "f_idade_dias": 821.0, "f_idade_meses": 27.0, "f_peso": 600.0,
+CAMPOS_FORM = {"f_nome": "", "f_n": 50, "f_raca": "Holandesa", "f_raca_descricao": "", "f_idade": 4.0, "f_idade_un": "anos", "f_idade_dias": 821.0, "f_idade_meses": 27.0, "f_peso": 600.0,
                "f_ordem": 2, "f_dias": 100, "f_estado": "Lactating Cow", "f_leite": 25.0, "f_gord": 3.7,
                "f_prot": 3.2, "f_bcs": PADROES_AVANCADOS["bcs"], "f_lac": PADROES_AVANCADOS["lactose_pct"],
                "f_maduro": PADROES_AVANCADOS["peso_maduro_kg"], "f_gest": PADROES_AVANCADOS["dias_gestacao"]}
 
 
 def _exemplo() -> None:
-    st.session_state.update({"f_nome": "Lote exemplo (valores ilustrativos)", "f_n": 50, "f_raca": "Holandesa",
+    st.session_state.update({"f_nome": "Lote exemplo (valores ilustrativos)", "f_n": 50, "f_raca": "Holandesa", "f_raca_descricao": "",
                              "f_idade": 2.25, "f_idade_un": "anos", "f_peso": 625.0, "f_ordem": 1, "f_dias": 100,
                              "f_leite": 25.0, "f_gord": 4.55, "f_prot": 3.66, "f_gest": 46})
 
@@ -80,18 +81,23 @@ def pagina_lote() -> None:
     st.title("Caracterização do lote")
     st.caption("Informe os dados médios do lote. Os campos marcados como padrão são hipóteses, não medições.")
     st.button("Carregar lote de exemplo (valores ilustrativos)", on_click=_exemplo)
-    with st.form("form_lote"):
+    # Widgets reativos: o campo da raça genérica aparece assim que a seleção muda.
+    # Salvar o lote continua sendo uma ação explícita pelo botão abaixo.
+    with st.container(border=True):
         a, b = st.columns(2)
         nome = a.text_input("Nome ou identificação do lote", key="f_nome")
         n = b.number_input("Número de vacas", 1, 100000, key="f_n", step=1)
-        raca = a.selectbox("Raça", ["Holandesa", "Jersey", "Outra / não parametrizada"], key="f_raca",
-                           help="Raça do lote a ser avaliado.")
-        estado = b.selectbox("Estado fisiológico", list(ESTADOS), format_func=ESTADOS.get, key="f_estado")
+        raca = a.selectbox("Raça", ["Holandesa", "Jersey", RACA_GENERICA], key="f_raca",
+                           help="Holandesa/Jersey têm ramo específico. Outra usa o ramo 'Other' do NASEM, apenas como aproximação experimental.")
+        raca_descricao = ""
+        if raca == RACA_GENERICA:
+            raca_descricao = a.text_input("Nome da outra raça (opcional)", key="f_raca_descricao", max_chars=60,
+                                          help="Para registro no relatório; não modifica a parametrização genérica do NASEM.")
+        estado = b.selectbox("Estado fisiológico", ["Lactating Cow"], format_func=ESTADOS.get, key="f_estado",
+                            help="O protótipo atual implementa somente vacas em lactação.")
         c1, c2 = a.columns([2, 1])
-        # Dentro de st.form, mudar a unidade NÃO provoca rerun imediato.
-        # Portanto o limite do widget não pode depender de `un` neste formulário.
-        # O limite de 12000 é apenas técnico; Lote.validar() aplica a faixa
-        # plausível em dias depois de converter a unidade selecionada.
+        # Limite técnico independente da unidade; Lote.validar() aplica a faixa
+        # plausível após converter anos/meses/dias ao salvar.
         idade = c1.number_input("Idade média", min_value=0.0, max_value=12000.0,
                                 key="f_idade", step=0.01, format="%.2f")
         un = c2.selectbox("Unidade", ["anos", "meses", "dias"], key="f_idade_un")
@@ -109,10 +115,11 @@ def pagina_lote() -> None:
             lac = y.number_input("Lactose do leite (%)", 0.0, 8.0, key="f_lac", step=0.05)
             mad = x.number_input("Peso à maturidade (kg)", 0.0, 1500.0, key="f_maduro", step=10.0)
             gest = y.number_input("Dias de gestação (dias)", 0, 300, key="f_gest", step=1)
-        ok = st.form_submit_button("Salvar lote", type="primary")
+        ok = st.button("Salvar lote", type="primary", key="salvar_lote")
     if ok:
         lote = Lote(nome, int(n), raca, float(idade), un, float(peso), int(ordem), int(dias), estado,
-                    float(leite), float(gord), float(prot), float(bcs), float(lac), float(mad), int(gest))
+                    float(leite), float(gord), float(prot), float(bcs), float(lac), float(mad), int(gest),
+                    raca_descricao=raca_descricao if raca == RACA_GENERICA else "")
         erros, avisos = lote.validar()
         for e in erros:
             st.error(e)
@@ -368,9 +375,14 @@ def pagina_formular() -> None:
         help="Exige oferta absorvida de Na >= exigência retornada pelo NASEM. "
              "Para permitir correção, confirme uma fonte de Na disponível com preço e máximo informados. "
              "Não verifica excessos nem garante qualidade nutricional completa.")
-    st.caption("Sem marcar, os balanços minerais serão apenas diagnósticos. "
-               "Se ativar sódio e Ca/P, todas as três restrições devem ser satisfeitas "
-               "para o sistema aceitar uma candidata.")
+    exigir_mg_cl_k = st.checkbox(
+        "Exigir magnésio, cloro e potássio ABSORVIDOS (NASEM, experimental)",
+        value=False, key="form_mg_cl_k_abs",
+        help="Acrescenta três restrições de oferta absorvida >= exigência NASEM. "
+             "Não verifica limites superiores, DCAD nem adequação nutricional completa.")
+    st.caption("Sem marcar, os balanços minerais são apenas diagnósticos. Quando ativados, "
+               "Ca/P, Na e Mg/Cl/K tornam-se restrições independentes que devem ser satisfeitas "
+               "para o sistema aceitar uma candidata. Não representa segurança mineral completa.")
     req, erros = montar_requisicao()
     if req is not None:
         req.opcoes.consumo_ms_kg_dia = consumo_ms
@@ -381,6 +393,7 @@ def pagina_formular() -> None:
         req.opcoes.min_forage_ndf_pct_dm = limite_fdn_forragem
         req.opcoes.require_absorbed_ca_p = exigir_ca_p
         req.opcoes.require_absorbed_na = exigir_na
+        req.opcoes.require_absorbed_mg_cl_k = exigir_mg_cl_k
     for e in erros:
         st.error(e)
     if not formulador_conectado():
@@ -611,6 +624,8 @@ def pagina_resultados() -> None:
         graf = df.iloc[:-1]
         st.dataframe(df, hide_index=True, use_container_width=True, column_config={
             c: st.column_config.NumberColumn(format="%.2f") for c in df.columns[1:]})
+        st.caption("Preço (R$/kg MN) é unitário e não deve ser somado. O total da dieta é a soma da coluna "
+                   "Custo (R$/vaca/dia).")
         tot_ms = resumo.consumo_ms_kg
         fig = go.Figure(go.Bar(x=graf["kg MS/vaca/dia"] / tot_ms * 100, y=graf["Ingrediente"], orientation="h",
                                marker_color=VERDE, hovertemplate="%{y}: %{x:.1f}% da MS<extra></extra>"))

@@ -12,6 +12,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 from services.formatting import num, brl
+from services.breed import utiliza_raca_generica, rotulo_raca_lote, AVISO_RACA_GENERICA
 
 GREEN = colors.HexColor('#1F6B4F')
 GRAY = colors.HexColor('#52625A')
@@ -41,10 +42,14 @@ def gerar_pdf_analise_dieta(res: dict, lote, *, agora: datetime | None = None) -
              Paragraph('AVALIAÇÃO PARCIAL — NÃO É DIETA FORMULADA NEM NUTRICIONALMENTE VALIDADA', warning),
              Paragraph('Esta análise não substitui a avaliação de médico-veterinário ou zootecnista.', text),
              Paragraph(f'Lote: {escape(lote.nome)} | Vacas: {lote.n_vacas} | Data: {agora:%d/%m/%Y %H:%M}', text),
+             Paragraph('Raça: ' + escape(rotulo_raca_lote(lote)), text),
              Paragraph(f'Matéria seca: {num(res["total_dm_kg"],2)} kg/vaca/dia | '
                        f'Custo: {brl(res["cost_cow_day"])} por vaca/dia | '
                        f'Custo do lote: {brl(res["cost_herd_day"])} por dia.', text),
              Paragraph('Composição da dieta informada', subtitle)]
+
+    if utiliza_raca_generica(lote.raca):
+        story.append(Paragraph(AVISO_RACA_GENERICA, warning))
 
     def tab(headers, rows, widths):
         data = [[p(h,cellhead) for h in headers]] + [[p(v) for v in row] for row in rows]

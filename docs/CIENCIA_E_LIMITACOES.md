@@ -46,3 +46,18 @@ Fonte: https://pmc.ncbi.nlm.nih.gov/articles/PMC7825592/
 A alimentação final altera o CMS observado e a equação tem erro individual: trata-se de uma **hipótese de cálculo**, não diagnóstico. No NASEM, `Trg_Dt_DMIn` continua fixado ao valor informado ou estimado e `DMIn_eqn=0`.
 
 O teto de participação é apenas **restrição operacional configurada pelo usuário**, aplicada a todos os ingredientes. Não é uma exigência NASEM; valores precisam ser definidos conforme o caso e não servem para validar segurança/adequação nutricional. A minimização de custo permanece local e sujeita aos limites efetivamente configurados. Os minerais absorvidos são reportados ainda que não sejam restrições ativas.
+
+
+## Limites superiores de sódio/cloro (revisão 22/10/2026)
+
+O resultado de cloro absorvido em 223,9% da **exigência mínima** não equivale a 223,9% de um limite máximo tolerável.
+
+O NASEM 2021 relata que o limite máximo tolerável de **cloreto isolado** na dieta não foi determinado, e cita o limite máximo tolerável histórico de **NaCl total de 3% da matéria seca** para vacas lactantes (NRC 2005). Esse valor NÃO é uma recomendação de inclusão. O MuuFeed não deve presumir adequação da relação Na/K/Cl, balanço cátion-aniônico (DCAD), composição da água ou outras fontes de sal com base em uma única concentração da biblioteca.
+
+Fonte: NASEM (2021), capítulo *Minerals*, seções Sodium / Chloride — https://www.ncbi.nlm.nih.gov/books/NBK600600/
+
+**Pendência:** regra validada de limite superior dietético com minerais da água, fontes múltiplas de NaCl e balanço eletrolítico, antes de declarar dieta completa ou não tóxica.
+
+## Atualização v10 — Mg/Cl/K como restrições opcionais
+
+A partir da v10, a interface pode **exigir magnésio, cloro e potássio ABSORVIDOS** simultaneamente, usando os pares `Abs_MgIn / An_Mg_req`, `Abs_ClIn / An_Cl_req`, `Abs_KIn / An_K_req` devolvidos pelo NASEM na mesma avaliação. Os três mínimos passam à lista de restrições apenas se a opção for marcada; a falta de qualquer par bloqueia a aceitação da dieta. Uma exigência **mínima** atendida não autoriza inferir que não existe excesso tóxico ou desequilíbrio eletrolítico. A ausência de modelo de água, DCAD, vitaminas e fibra fisicamente efetiva continua impeditiva para alegar validação nutricional completa.

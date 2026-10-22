@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from services.feed_translation import traduzir_nome
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 CATEGORIAS_PT = {
     "Vitamin/Mineral": "Vitaminas e minerais", "By-Product/Other": "Subprodutos e outros",
@@ -49,10 +51,11 @@ class CatalogoIngredientes:
         self._bruta = carregar_biblioteca_bruta()  # somente leitura
         self._pt: dict[str, str] = _json("feed_names_pt.json")
         b = self._bruta
+        nomes_traduzidos = [traduzir_nome(str(n), self._pt) for n in b["Fd_Name"]]
         t = pd.DataFrame({
             "uid": b["UID"], "nome_original": b["Fd_Name"],
-            "nome_pt": b["Fd_Name"].map(lambda n: self._pt.get(n, n)),
-            "traduzido": b["Fd_Name"].isin(self._pt),
+            "nome_pt": [nome for nome, _ in nomes_traduzidos],
+            "traduzido": [ok for _, ok in nomes_traduzidos],
             "categoria": b["Fd_Category"], "categoria_pt": b["Fd_Category"].map(lambda c: CATEGORIAS_PT.get(c, c)),
             "tipo": b["Fd_Type"], "tipo_pt": b["Fd_Type"].map(lambda c: TIPOS_PT.get(c, c)),
             "ms_pct": b["Fd_DM"],

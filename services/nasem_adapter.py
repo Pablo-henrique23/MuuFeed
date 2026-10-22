@@ -11,7 +11,7 @@ import math
 from models import (Indicador, ItemDieta, RegraAcionada, Restricao,
                     ResultadoFormulacao)
 from formulation_engine import FeedChoice, FormulationRequest, formulate_diet
-from services.breed import para_raca_nasem
+from services.breed import para_raca_nasem, utiliza_raca_generica, AVISO_RACA_GENERICA
 
 
 class NasemFormulador:
@@ -55,6 +55,8 @@ class NasemFormulador:
             return False, "A verificação de cálcio/fósforo deve ser ativada ou desativada."
         if type(getattr(req.opcoes, "require_absorbed_na", False)) is not bool:
             return False, "A restrição de sódio deve ser ativada ou desativada."
+        if type(getattr(req.opcoes, "require_absorbed_mg_cl_k", False)) is not bool:
+            return False, "A restrição de Mg/Cl/K deve ser ativada ou desativada."
         # Suplementos minerais têm dose potencialmente sensível: nunca deixá-los
         # com inclusão ilimitada ou criar doses automáticas sem validação.
         suplementos = {"Sodium chloride (salt)", "Sodium bicarbonate"}
@@ -112,8 +114,11 @@ class NasemFormulador:
             min_forage_ndf_pct_dm=req.opcoes.min_forage_ndf_pct_dm,
             require_absorbed_ca_p=getattr(req.opcoes, "require_absorbed_ca_p", False),
             require_absorbed_na=getattr(req.opcoes, "require_absorbed_na", False),
+            require_absorbed_mg_cl_k=getattr(req.opcoes, "require_absorbed_mg_cl_k", False),
         ))
         warnings = list(result.get("warnings", []))
+        if utiliza_raca_generica(req.lote.raca):
+            warnings.insert(0, AVISO_RACA_GENERICA)
         # O motor recebe CMS fixo; quem o estimou foi a etapa anterior, não o NASEM.
         if getattr(req.opcoes, "consumo_ms_origem", "informado") == "estimado_nrc2001":
             warnings = [w for w in warnings if "Consumo total de matéria seca foi fornecido" not in w]
@@ -155,7 +160,7 @@ class NasemFormulador:
             gaps = diagnostics.get("closest_candidate_gaps") or {}
             names_gap = {"total_dm_kg": "diferença MS (kg)", "me_mcal_day": "déficit ME (Mcal/dia)",
                          "mp_g_day": "déficit MP (g/dia)", "na_abs_g_day": "déficit sódio absorvido (g/dia)", "ndf_pct_dm": "déficit FDN (p.p.)",
-                         "starch_pct_dm": "excesso amido (p.p.)", "ca_abs_g_day": "déficit cálcio absorvido (g/dia)", "p_abs_g_day": "déficit fósforo absorvido (g/dia)", "forage_ndf_pct_dm": "déficit FDN de forragens (p.p.)", "bounds_dm_kg": "violação de limite (kg MS)"}
+                         "starch_pct_dm": "excesso amido (p.p.)", "ca_abs_g_day": "déficit cálcio absorvido (g/dia)", "p_abs_g_day": "déficit fósforo absorvido (g/dia)", "forage_ndf_pct_dm": "déficit FDN de forragens (p.p.)", "mg_abs_g_day": "déficit magnésio absorvido (g/dia)", "cl_abs_g_day": "déficit cloro absorvido (g/dia)", "k_abs_g_day": "déficit potássio absorvido (g/dia)", "bounds_dm_kg": "violação de limite (kg MS)"}
             for key, value in gaps.items():
                 if float(value) > 1e-5:
                     warnings.append(f"Melhor tentativa avaliada — {names_gap.get(key, key)}: {value:.3f}.")
@@ -172,6 +177,14 @@ class NasemFormulador:
             items.append(ItemDieta(ing.uid, ing.nome_pt, row["kg_dm_cow_day"],
                                    row["kg_as_fed_cow_day"], row["cost_brl_cow_day"],
                                    row.get("price_brl_kg_as_fed")))
+        # Triagem conservadora: não chamar razão Cl/exigência de limite de toxicidade.
+        from services.mineral_upper_review import revisar_superiores_minerais
+        comp_triagem = result.get("nutrient_composition") or {}
+        warnings.extend(revisar_superiores_minerais(
+            dieta_ms=((item["ingredient"], float(item["kg_dm_cow_day"])) for item in result["diet"]),
+            total_ms_kg=total_dm,
+            balancos=comp_triagem.get("absorbed_mineral_checks"),
+        ))
         nutrition = result["nutrition"]
         indicators = [
             Indicador("me", "Energia metabolizável", "Mcal/dia",

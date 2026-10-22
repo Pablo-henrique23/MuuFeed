@@ -27,8 +27,8 @@ def analisar_dieta(lote, ingredientes, quantidades_mn: dict[str, float], *,
     animal, equations = dict(animal), dict(equations)
     animal.update(lote.para_animal_nasem())
     # Mesmo mapeamento validado usado pelo formulador.
-    from services.breed import para_raca_nasem
-    animal["An_Breed"] = para_raca_nasem(lote.raca)
+    from services.breed import AVISO_RACA_GENERICA, utiliza_raca_generica
+    generic_breed = utiliza_raca_generica(lote.raca)
     catalog = load_library().set_index("Fd_Name")
     rows, total_dm, cost = [], 0.0, 0.0
     ndf_mass, starch_mass, forage_ndf_mass = 0.0, 0.0, 0.0
@@ -83,7 +83,7 @@ def analisar_dieta(lote, ingredientes, quantidades_mn: dict[str, float], *,
         r["pct_dm"] = 100 * r["kg_dm"] / total_dm
     minerais = calcular_minerais(catalog.reset_index(), {r['ingredient']: r['kg_dm'] for r in rows})
     perfil_adicional = calcular_perfil(catalog.reset_index(), {r["ingredient"]: r["kg_dm"] for r in rows})
-    alerts = ["Dieta informada pelo usuário: nenhuma quantidade foi otimizada.",
+    alerts = ([AVISO_RACA_GENERICA] if generic_breed else []) + ["Dieta informada pelo usuário: nenhuma quantidade foi otimizada.",
               "MS total derivada das quantidades; não foi estimada como ingestão espontânea.",
               "Fibra fisicamente efetiva, vitaminas e limites nutricionais de inclusão não foram verificados. "
               "Balanços minerais absorvidos (quando disponíveis) são verificações parciais."]
@@ -91,6 +91,11 @@ def analisar_dieta(lote, ingredientes, quantidades_mn: dict[str, float], *,
         if mineral["status"] == "viola":
             alerts.append(f"{mineral['label']}: ingerido {mineral['intake']:.2f} g/dia, "
                           f"exigido {mineral['requirement']:.2f} g/dia. Abaixo da exigência NASEM.")
+    from services.mineral_upper_review import revisar_superiores_minerais
+    alerts.extend(revisar_superiores_minerais(
+        dieta_ms=((r["ingredient"], r["kg_dm"]) for r in rows),
+        total_ms_kg=total_dm, balancos=balancos,
+    ))
     max_row = max(rows, key=lambda r: r["pct_dm"])
     if max_row["pct_dm"] >= 70:
         alerts.append(f"Ingrediente dominante: {max_row['name']} ({max_row['pct_dm']:.1f}% da MS). Gatilho informativo de 70%, não limite nutricional.")

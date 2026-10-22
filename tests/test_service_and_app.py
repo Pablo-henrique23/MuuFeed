@@ -186,3 +186,24 @@ def test_ui_alerta_inconsistencia_financeira():
     req = RequisicaoFormulacao(lote_ok(), ingredientes_teste())
     at = _com_resultado(replace(resultado_teste("candidata_experimental"), custo_vaca_dia=CUSTO_VACA + 5), req)
     assert any("Inconsistência financeira" in w.value for w in at.warning)
+
+
+def test_campo_nome_outra_raca_aparece_imediatamente_so_no_modo_generico():
+    """Regressão Streamlit: a seleção de raça deve ser reativa, sem clicar Salvar."""
+    from services.breed import RACA_GENERICA
+
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.session_state["nav"] = "Lote"
+    at.run()
+    assert not at.exception
+    assert not [w for w in at.text_input if w.label == "Nome da outra raça (opcional)"]
+
+    seletor = next(w for w in at.selectbox if w.label == "Raça")
+    seletor.select(RACA_GENERICA).run()
+    assert not at.exception
+    assert len([w for w in at.text_input if w.label == "Nome da outra raça (opcional)"]) == 1
+
+    seletor = next(w for w in at.selectbox if w.label == "Raça")
+    seletor.select("Jersey").run()
+    assert not at.exception
+    assert not [w for w in at.text_input if w.label == "Nome da outra raça (opcional)"]

@@ -20,6 +20,7 @@ from reportlab.platypus import BaseDocTemplate, Frame, KeepTogether, PageTemplat
 
 from models import ESTADOS, PADROES_AVANCADOS, ROTULOS, Ingrediente, Lote, ResultadoFormulacao
 from services.financeiro import DIAS_MES, resumo_financeiro
+from services.breed import rotulo_raca_lote, utiliza_raca_generica, AVISO_RACA_GENERICA
 from services.formatting import brl, data_br, data_hora_br, num
 from services.rotulos import eh_chave_tecnica, nao_avaliadas_unicas, rotulo_legivel
 
@@ -205,13 +206,16 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
         st_.append(_p("Dados do lote não disponíveis neste resultado.", S["b"]))
     else:
         pares = [("Lote", lote.nome), ("Número de animais", num(lote.n_vacas, 0)),
-                 ("Raça", lote.raca or "Não informada"), ("Estado fisiológico", ESTADOS.get(lote.estado, lote.estado)),
+                 ("Raça", rotulo_raca_lote(lote) if lote.raca else "Não informada"), ("Estado fisiológico", ESTADOS.get(lote.estado, lote.estado)),
+                 ("Modelo aplicado", "NASEM para bovinos leiteiros"),
                  ("Idade média", f"{num(lote.idade_valor, 2)} {lote.idade_unidade} ({num(lote.idade_dias, 0)} dias)"),
                  ("Peso médio", num(lote.peso_kg, 1, "kg")), ("Ordem de lactação", f"{lote.ordem_lactacao}ª"),
                  ("Dias em lactação", num(lote.dias_lactacao, 0, "dias")),
                  ("Produção de leite", num(lote.leite_kg_dia, 1, "kg/vaca/dia")), ("Gordura do leite", num(lote.gordura_pct, 2, "%")),
                  ("Proteína do leite", num(lote.proteina_pct, 2, "%"))]
         st_.append(_pares(S, pares))
+        if utiliza_raca_generica(lote.raca):
+            st_.append(_p(AVISO_RACA_GENERICA, S["aviso"]))
         padrao = lote.campos_padrao
         if padrao:
             fmt = {"bcs": lote.bcs, "lactose_pct": lote.lactose_pct, "peso_maduro_kg": lote.peso_maduro_kg,

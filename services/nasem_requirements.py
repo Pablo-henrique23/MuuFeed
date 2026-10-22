@@ -51,6 +51,19 @@ def exigir_calcio_fosforo(output) -> tuple[float, float, float, float]:
     return (ca["intake"], ca["requirement"], p["intake"], p["requirement"])
 
 
+def exigir_magnesio_cloro_potassio(output) -> tuple[float, float, float, float, float, float]:
+    """Oferta/exigência absorvidas do NASEM para Mg/Cl/K, na ordem dos pares.
+
+    Rejeita qualquer variável ausente; composição bruta não é substituta.
+    """
+    chaves = ("magnesio_absorvido", "cloro_absorvido", "potassio_absorvido")
+    balancos = ler_balancos(output, apenas=chaves)
+    if any(balancos[k]["status"] == "nao_avaliado" for k in chaves):
+        raise ValueError("NASEM não retornou Mg, Cl e K absorvidos/exigidos válidos")
+    return tuple(float(x) for k in chaves for x in
+                 (balancos[k]["intake"], balancos[k]["requirement"]))
+
+
 def exigir_sodio(output) -> tuple[float, float]:
     """Retorna Na absorvido/exigido (g/dia) para uma restrição explícita.
 

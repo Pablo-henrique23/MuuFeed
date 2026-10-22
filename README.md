@@ -70,3 +70,24 @@ Os antigos `LEIA-ME-V3.md`, `LEIA-ME-V4.md`, `LEIA-ME-V5.md` e demais tutoriais 
 - Sugestão assistida pode incluir cloreto de sódio apenas por escolha explícita, com confirmação de preço, disponibilidade e **máximo informado pelo usuário**.
 - Regras de Ca/P/Na e diagnósticos restantes são independentes; nenhuma dieta é declarada nutricionalmente completa.
 - Veja [validação do v8](docs/VALIDACAO_V8.md) e [backlog](docs/BACKLOG.md).
+
+## Atualização v10 — escopo reduzido e avaliação de macrominerais
+
+- O cadastro **não tem Destinação econômica**: a aplicação é exclusivamente para **vacas leiteiras em lactação**. O campo oferece Holandesa (`An_Breed='Holstein'`), Jersey (`An_Breed='Jersey'`) e **Outra raça — genérica experimental** (`An_Breed='Other'`). O nome específico pode ser registrado, mas NÃO altera as equações usadas pelo ramo `Other`. Esta opção exige cautela e não constitui validação para Gir, Girolando ou qualquer outra raça; estados fisiológicos além de lactação continuam não suportados.
+- Nova opção **Exigir magnésio, cloro e potássio absorvidos**: cada um passa a restringir a busca pela comparação entre oferta absorvida e exigência NASEM em g/dia; pode ser combinada com Ca/P e Na. Se não encontrar candidata, o resultado deve indicar ausência de candidata que satisfaça os requisitos verificados, nunca um ótimo nutricionalmente validado.
+- Mesmo se os seis macrominerais estiverem em conformidade, limites superiores, minerais traço, vitaminas, água, DCAD, aminoácidos e fibra fisicamente efetiva **não estão automaticamente validados**. O alerta experimental continua obrigatório.
+- Execute `python scripts/verificar_release_v10.py` no ambiente que contém `nasem_dairy`, e consulte [docs/VALIDACAO_V10.md](docs/VALIDACAO_V10.md).
+
+## Complemento de entrega — opção de raça genérica (experimental)
+
+A seleção **Outra raça (genérica — experimental)** ativa `An_Breed='Other'` do `nasem_dairy`, sem disfarçar a raça como Holandesa. O nome opcional da raça é apenas metadado para os relatórios. A aplicação emite aviso no cadastro, resultado e PDFs; **não garante parâmetros nutricionais adequados à raça informada**.
+
+Teste no NASEM instalado antes de demonstrar este modo:
+
+```bash
+python scripts/verificar_raca_generica.py
+```
+
+Se retornar erro, utilize Holandesa/Jersey no cenário principal e registre a limitação. Mesmo passando, mantenha a indicação experimental.
+
+[Checklist final](docs/CHECKLIST_ENTREGA.md) • [Casos de teste](docs/CASOS_DE_TESTE.md)

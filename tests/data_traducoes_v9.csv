@@ -1,0 +1,91 @@
+UID,Nome original NASEM,Sugestao de nome PT
+NRC16F1086,Whey protein concentrate,Concentrado proteico de soro de leite
+NRC16F1083,"Whey, delactosed",Soro de leite com lactose removida
+NRC16F1084,"Whey, fresh",Soro de leite fresco
+NRC16F1085,"Whey, permeate",Permeado de soro de leite
+NRC16F1087,Whole milk,Leite integral
+NRC16F11,"Barley silage, headed","Silagem de cevada, em espigamento"
+NRC16F15,"Beet pulp, dry, molasses added",Polpa de beterraba seca com melaço
+NRC16F16,"Beet pulp, wet",Polpa de beterraba úmida
+NRC16F18,"Bermudagrass silage, mature","Silagem de capim-bermuda, maduro"
+NRC16F19,"Bermudagrass silage, mid-mtr","Silagem de capim-bermuda, maturidade intermediária"
+NRC16F20,"Blood meal, low dRUP",Farinha de sangue (baixa digestibilidade da proteína não degradada no rúmen; dRUP)
+NRC16F41,"Corn gluten feed, wet","Glúten de milho tipo feed, úmido"
+NRC16F52,"Corn stalks, ensiled, high DM","Colmos de milho ensilados, alta matéria seca"
+NRC16F51,"Corn stalks, ensiled, low DM","Colmos de milho ensilados, baixa matéria seca"
+NRC16F53,"Corn, ear w husk, stlk, hi fbr","Milho (espiga, palha e colmo), alto teor de fibra"
+NRC16F54,"Corn, ear, huks, stlk, low fbr","Milho (espiga, palha e colmo), baixo teor de fibra"
+NRC16F55,Cotton gin trash,Resíduo de beneficiamento do algodão
+NRC16F62,DGS modified,Grãos modificados de destilaria (DGS)
+NRC16F69,"Fat, flaxseed oil",Gordura: óleo de linhaça
+NRC16F68,"Fat, lard",Gordura: banha suína
+NRC16F70,"Fat, safflower oil",Gordura: óleo de cártamo
+NRC16F1051,Ferrous carbonate,Carbonato ferroso
+NRC16F1049,Ferrous sulfate (7H2O),Sulfato ferroso heptahidratado (7H2O)
+NRC16F1050,Ferrous sulfate (H2O),Sulfato ferroso monoidratado (H2O)
+NRC16F97,Flaxseed meal,Farelo de linhaça
+NRC16F82,"Grain sorghum silage, midmtr","Silagem de sorgo granífero, maturidade intermediária"
+NRC16F83,"Grass legume mixt, grass slg",Mistura de gramínea e leguminosa: silagem com predomínio de gramínea
+NRC16F84,"Grass lg mixt, grass hay, mid","Mistura de gramínea e leguminosa: feno com predomínio de gramínea, maturidade intermediária"
+NRC16F85,"Grass lg mixt, grass hay, mtr","Mistura de gramínea e leguminosa: feno com predomínio de gramínea, maduro"
+NRC16F86,"Grass lg mixt, leg. hay, mtr","Mistura de gramínea e leguminosa: feno com predomínio de leguminosa, maduro"
+NRC16F87,"Grass lg mixt, leg., hay, immtr","Mistura de gramínea e leguminosa: feno com predomínio de leguminosa, imaturo"
+NRC16F88,"Grass lg mixt, legume slg",Mistura de gramínea e leguminosa: silagem com predomínio de leguminosa
+NRC16F89,"Grass lg mixt, mix hay",Mistura de gramínea e leguminosa: feno misto
+NRC16F90,"Grass lg mixt, mix silage",Mistura de gramínea e leguminosa: silagem mista
+NRC16F91,"Legume hay, immature","Feno de leguminosa, imaturo"
+NRC16F92,"Legume hay, mature","Feno de leguminosa, maduro"
+NRC16F94,"Legume silage, immature","Silagem de leguminosa, imatura"
+NRC16F99,Millet hay,Feno de milheto
+NRC16F100,Millet silage,Silagem de milheto
+NRC16F107,Pea hay,Feno de ervilha
+NRC16F108,Pea silage,Silagem de ervilha
+NRC16F109,Peanut hay,Feno de amendoim
+NRC16F110,Peanut hulls,Casca de amendoim
+NRC16F112,Peanut skins,Película de amendoim
+NRC16F113,Peanuts,Amendoim em grãos
+NRC16F114,Peas,Ervilhas em grãos
+NRC16F1024,"Phosphate, Curacao",Fosfato de Curaçao (origem mineral)
+NRC16F1026,"Phosphate, monosodium (H2O)",Fosfato monossódico monoidratado (H2O)
+NRC16F1027,Phosphoric acid,Ácido fosfórico
+NRC16F115,Pineapple cannery waste,Resíduos de processamento industrial de abacaxi
+NRC16F1031,Potassium iodide,Iodeto de potássio
+NRC16F116,Potato byproduct,Subproduto de batata
+NRC16F121,"Rice silage, headed","Silagem de arroz, em espigamento"
+NRC16F122,"Rice silage, vegetative","Silagem de arroz, em estádio vegetativo"
+NRC16F124,"Rye annual fresh, immature","Centeio anual fresco, imaturo"
+NRC16F125,"Rye annual fresh, mid-maturity","Centeio anual fresco, maturidade intermediária"
+NRC16F126,"Rye annual hay, immature","Feno de centeio anual, imaturo"
+NRC16F127,"Rye annual hay, mature","Feno de centeio anual, maduro"
+NRC16F131,"Rye annual hay, mid-maturity","Feno de centeio anual, maturidade intermediária"
+NRC16F128,"Rye annual silage, immature","Silagem de centeio anual, imatura"
+NRC16F129,"Rye annual silage, mature","Silagem de centeio anual, madura"
+NRC16F130,"Rye annual silage, mid-maturity","Silagem de centeio anual, maturidade intermediária"
+NRC16F132,Rye grain,Centeio em grão
+NRC16F133,Safflower meal,Farelo de cártamo
+NRC16F1062,"Selenate, sodium (10 H2O)",Selenato de sódio decahidratado (10 H2O)
+NRC16F1061,"Selenite, sodium",Selenito de sódio
+NRC16F1063,"Selenium yeast, generic",Levedura enriquecida com selênio (genérica)
+NRC16F1035,Sodium sesquicarbonate (2H2O),Sesquicarbonato de sódio di-hidratado (2H2O)
+NRC16F1028,Sodium tripolyphosphate,Tripolifosfato de sódio
+NRC16F135,"Sorghum forage silage, immature","Silagem de sorgo forrageiro, imaturo"
+NRC16F1073,"Sorghum grain, steam flaked",Sorgo em grão floculado a vapor
+NRC16F139,Sorghum soybean silage,Silagem de sorgo e soja
+NRC16F142,Sorghum-sudangrass hay,Feno de híbrido sorgo-sudão
+NRC16F140,Sorghum-sudangrass silage,Silagem de híbrido sorgo-sudão
+NRC16F150,Spelt grain,Espelta em grão
+NRC16F151,"Sudangrass hay, mature","Feno de capim-sudão, maduro"
+NRC16F152,"Sudangrass hay, mid-maturity","Feno de capim-sudão, maturidade intermediária"
+NRC16F153,"Sudangrass silage, mature","Silagem de capim-sudão, maduro"
+NRC16F154,"Sudangrass silage, mid-maturity","Silagem de capim-sudão, maturidade intermediária"
+NRC16F155,Sugarcane bagasse hay,Bagaço de cana-de-açúcar seco (tipo feno)
+NRC16F156,Sugarcane bagasse silage,Bagaço de cana-de-açúcar ensilado
+NRC16F159,Sunflower silage,Silagem de girassol
+NRC16F160,Sweet corn cannery waste,Resíduo de processamento industrial de milho-doce
+NRC16F164,Triticale hay,Feno de triticale
+NRC16F165,Triticale plus pea silage,Silagem de triticale com ervilha
+NRC16F166,"Triticale silage, mature","Silagem de triticale, madura"
+NRC16F167,"Triticale silage, mid-maturity","Silagem de triticale, maturidade intermediária"
+NRC16F168,Urea,Ureia (nitrogênio não proteico)
+NRC21F1098,"VitTM Premix, generic",Pré-mistura de vitaminas e microminerais (genérica)
+NRC16F171,"Wheat hay, headed","Feno de trigo, em espigamento"
