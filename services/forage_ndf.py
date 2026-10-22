@@ -11,6 +11,7 @@ FORAGE_NASEM_NAMES = frozenset({
 NONFORAGE_NASEM_NAMES = frozenset({
     "Canola meal", "Corn grain HM, coarse grind", "Corn grain dry, medium grind",
     "Soybean meal, solvent 48CP", "Citrus pulp, dry",
+    "Sodium chloride (salt)", "Sodium bicarbonate",
 })
 
 def is_forage(name: str) -> bool | None:

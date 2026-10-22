@@ -49,3 +49,14 @@ def exigir_calcio_fosforo(output) -> tuple[float, float, float, float]:
         raise ValueError("NASEM não retornou cálcio e fósforo absorvidos/exigidos válidos")
     ca, p = result["calcio_absorvido"], result["fosforo_absorvido"]
     return (ca["intake"], ca["requirement"], p["intake"], p["requirement"])
+
+
+def exigir_sodio(output) -> tuple[float, float]:
+    """Retorna Na absorvido/exigido (g/dia) para uma restrição explícita.
+
+    Dados inválidos ou ausentes bloqueiam a restrição em vez de virar zero.
+    """
+    bal = ler_balancos(output, apenas=("sodio_absorvido",))["sodio_absorvido"]
+    if bal["status"] == "nao_avaliado":
+        raise ValueError("NASEM não retornou sódio absorvido/exigido válido")
+    return float(bal["intake"]), float(bal["requirement"])

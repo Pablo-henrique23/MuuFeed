@@ -30,7 +30,7 @@ CANDIDATOS_LACTACAO = (
 )
 
 
-def sugerir_ingredientes(lote, catalogo) -> tuple[list[Sugestao], list[str]]:
+def sugerir_ingredientes(lote, catalogo, *, incluir_fonte_sodio: bool = False) -> tuple[list[Sugestao], list[str]]:
     """Seleciona apenas nomes exatos presentes na biblioteca; sem preços inventados.
 
     Retorna (sugestões, avisos). Não altera estado, catálogo ou requisição.
@@ -43,7 +43,11 @@ def sugerir_ingredientes(lote, catalogo) -> tuple[list[Sugestao], list[str]]:
         return [], ["O lote contém erros de validação. Corrija-os antes de sugerir ingredientes."]
     por_nome = {str(r.nome_original): r for r in catalogo.tabela.itertuples(index=False)}
     saida, avisos = [], []
-    for nome, grupo, motivo in CANDIDATOS_LACTACAO:
+    candidatos = CANDIDATOS_LACTACAO
+    if incluir_fonte_sodio:
+        candidatos += (("Sodium chloride (salt)", "Mineral",
+                        "Fonte de sódio e cloro; exige preço real e máximo de inclusão definido por responsável técnico."),)
+    for nome, grupo, motivo in candidatos:
         alimento = por_nome.get(nome)
         if alimento is None:
             avisos.append(f"Ingrediente '{nome}' não encontrado na biblioteca instalada; ignorado.")

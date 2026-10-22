@@ -6,7 +6,8 @@ por vaca/dia; a matéria natural (MN) é derivada pelo teor de MS do alimento.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field, asdict
+from services.breed import para_raca_nasem
 from typing import Optional
 
 DIAS_POR_ANO = 365.25   # constantes de conversão de unidade, não são parâmetros nutricionais
@@ -90,11 +91,12 @@ class Lote:
         `An_Parity_rl` = número de partos (docstring de nasem_dairy.nasem_equations.dry_matter_intake)."""
         return {
             "An_StatePhys": self.estado, "An_Parity_rl": self.ordem_lactacao,
+            "An_Breed": para_raca_nasem(self.raca),
             "An_AgeDay": self.idade_dias, "An_BW": self.peso_kg, "An_BW_mature": self.peso_maduro_kg,
             "An_BCS": self.bcs, "An_LactDay": self.dias_lactacao, "An_GestDay": self.dias_gestacao,
             "Trg_MilkProd": self.leite_kg_dia, "Trg_MilkFatp": self.gordura_pct,
             "Trg_MilkTPp": self.proteina_pct, "Trg_MilkLacp": self.lactose_pct,
-        }  # `raca` é informativa e segue em campo próprio da requisição
+        }  # a raça é parte do animal_input, não só metadado
 
 
 @dataclass
@@ -141,8 +143,7 @@ class OpcoesFormulacao:
     max_starch_pct_dm: Optional[float] = None  # Limite opcional definido pelo usuário, % da MS
     min_forage_ndf_pct_dm: Optional[float] = None  # FDN de forragem opcional, % da MS
     require_absorbed_ca_p: bool = False  # opcional: duas restrições adicionais calculadas pelo NASEM
-    consumo_ms_origem: str = "informado"  # "informado" ou "estimado_nrc2001"; documentar hipótese
-    max_share_ingredient_pct_dm: Optional[float] = None  # teto operacional do usuário, NÃO limite nutricional
+    require_absorbed_na: bool = False  # opcional: exigência de sódio ABSORVIDO pelo NASEM
     consumo_ms_origem: str = "informado"  # "informado" ou "estimado_nrc2001"; documentar hipótese
     max_share_ingredient_pct_dm: Optional[float] = None  # teto operacional do usuário, NÃO limite nutricional
 

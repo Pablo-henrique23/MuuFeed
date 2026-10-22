@@ -85,7 +85,7 @@ def pagina_lote() -> None:
         nome = a.text_input("Nome ou identificação do lote", key="f_nome")
         n = b.number_input("Número de vacas", 1, 100000, key="f_n", step=1)
         raca = a.selectbox("Raça", ["Holandesa", "Jersey", "Outra / não parametrizada"], key="f_raca",
-                           help="Holandesa e Jersey são convertidas para An_Breed no NASEM. Outras raças requerem revisão do suporte no modelo.")
+                           help="Raça do lote a ser avaliado.")
         estado = b.selectbox("Estado fisiológico", list(ESTADOS), format_func=ESTADOS.get, key="f_estado")
         c1, c2 = a.columns([2, 1])
         # Dentro de st.form, mudar a unidade NÃO provoca rerun imediato.
@@ -137,7 +137,17 @@ def pagina_sugestao_automatica() -> None:
         if st.button("Ir ao lote", key="assistir_lote"):
             ir_para("Lote")
         return
-    sugestoes, avisos = sugerir_ingredientes(ss["lote"], cat)
+    incluir_fonte_sodio = st.checkbox(
+        "Incluir sal (cloreto de sódio) como ingrediente candidato opcional",
+        value=False, key="assistido_sodio",
+        help="O ingrediente consta na biblioteca NASEM; seu uso exige confirmar disponibilidade, "
+             "preço e um máximo operacional definido por responsável técnico. "
+             "Não é uma prescrição ou quantidade recomendada.")
+    sugestoes, avisos = sugerir_ingredientes(ss["lote"], cat, incluir_fonte_sodio=incluir_fonte_sodio)
+    if incluir_fonte_sodio:
+        st.warning("Suplementos minerais exigem atenção: após confirmar, informe o máximo "
+                   "(kg MN/vaca/dia) do sal em 'Ingredientes e preços' com orientação profissional. "
+                   "Sem isso a formulação será bloqueada por segurança.")
     for aviso in avisos:
         st.warning(aviso)
     if not sugestoes:
@@ -147,12 +157,12 @@ def pagina_sugestao_automatica() -> None:
     linhas = []
     for sug in sugestoes:
         atual = ss["selecionados"].get(sug.uid, {})
-        linhas.append({"uid": sug.uid, "Incluir": bool(atual.get("disponivel", True)),
+        linhas.append({"uid": sug.uid, "Incluir": bool(atual.get("disponivel", sug.grupo != "Mineral")),
                        "Ingrediente": sug.nome_pt, "Grupo": sug.grupo,
                        "Justificativa da sugestão": sug.motivo,
                        "Preço (R$/kg MN)": atual.get("preco", sug.preco_ilustrativo)})
     editado = st.data_editor(
-        pd.DataFrame(linhas), hide_index=True, use_container_width=True, key="sugestao_editor",
+        pd.DataFrame(linhas), hide_index=True, use_container_width=True, key=f"sugestao_editor_{int(incluir_fonte_sodio)}",
         disabled=["uid", "Ingrediente", "Grupo", "Justificativa da sugestão"],
         column_config={"uid": None, "Incluir": st.column_config.CheckboxColumn("Disponível e incluir"),
                        "Preço (R$/kg MN)": st.column_config.NumberColumn(min_value=0.0, format="%.2f")})
@@ -352,8 +362,15 @@ def pagina_formular() -> None:
         value=False, key="form_minerais_abs",
         help="Restringe a busca usando oferta absorvida e exigência calculadas pelo próprio NASEM. "
              "Pode não haver solução com os ingredientes disponíveis; não verifica os demais nutrientes.")
-    st.caption("Sem marcar, o MuuFeed ainda pode exibir o balanço mineral calculado pelo NASEM, "
-               "mas não altera a dieta para corrigi-lo.")
+    exigir_na = st.checkbox(
+        "Exigir sódio ABSORVIDO (NASEM, experimental)",
+        value=False, key="form_sodio_abs",
+        help="Exige oferta absorvida de Na >= exigência retornada pelo NASEM. "
+             "Para permitir correção, confirme uma fonte de Na disponível com preço e máximo informados. "
+             "Não verifica excessos nem garante qualidade nutricional completa.")
+    st.caption("Sem marcar, os balanços minerais serão apenas diagnósticos. "
+               "Se ativar sódio e Ca/P, todas as três restrições devem ser satisfeitas "
+               "para o sistema aceitar uma candidata.")
     req, erros = montar_requisicao()
     if req is not None:
         req.opcoes.consumo_ms_kg_dia = consumo_ms
@@ -363,6 +380,7 @@ def pagina_formular() -> None:
         req.opcoes.max_starch_pct_dm = limite_amido
         req.opcoes.min_forage_ndf_pct_dm = limite_fdn_forragem
         req.opcoes.require_absorbed_ca_p = exigir_ca_p
+        req.opcoes.require_absorbed_na = exigir_na
     for e in erros:
         st.error(e)
     if not formulador_conectado():
@@ -593,8 +611,6 @@ def pagina_resultados() -> None:
         graf = df.iloc[:-1]
         st.dataframe(df, hide_index=True, use_container_width=True, column_config={
             c: st.column_config.NumberColumn(format="%.2f") for c in df.columns[1:]})
-        st.caption("Preço (R$/kg MN) é unitário e não deve ser somado. O total da dieta é a soma da coluna "
-                   "Custo (R$/vaca/dia).")
         tot_ms = resumo.consumo_ms_kg
         fig = go.Figure(go.Bar(x=graf["kg MS/vaca/dia"] / tot_ms * 100, y=graf["Ingrediente"], orientation="h",
                                marker_color=VERDE, hovertemplate="%{y}: %{x:.1f}% da MS<extra></extra>"))

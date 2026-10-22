@@ -51,6 +51,7 @@ class FormulationRequest:
     max_starch_pct_dm: float | None = None
     min_forage_ndf_pct_dm: float | None = None  # opcional, em % MS; classificação explícita
     require_absorbed_ca_p: bool = False  # restringe Ca/P na base absorvida calculada pelo NASEM
+    require_absorbed_na: bool = False  # exige sódio ABSORVIDO conforme NASEM (opcional)
 
 
 def _valid_real(value: Any, what: str, *, positive: bool = False) -> float:
@@ -66,6 +67,8 @@ def _valid_real(value: Any, what: str, *, positive: bool = False) -> float:
 def validate_request(req: FormulationRequest) -> None:
     if type(req.require_absorbed_ca_p) is not bool:
         raise ValueError("require_absorbed_ca_p deve ser booleano")
+    if type(req.require_absorbed_na) is not bool:
+        raise ValueError("require_absorbed_na deve ser booleano")
     if len(req.feeds) < 2:
         raise ValueError("Selecione pelo menos dois ingredientes")
     names = [f.name for f in req.feeds]
@@ -262,12 +265,16 @@ def formulate_diet(
         diet = pd.DataFrame({"Feedstuff": names, "kg_user": x})
         output = evaluator(diet, copy.deepcopy(animal), copy.deepcopy(equations), copy.deepcopy(infusion))
         m = _get_metrics(output)
+        values = tuple(m[k] for k in METRICS)
         if request.require_absorbed_ca_p:
             from services.nasem_requirements import exigir_calcio_fosforo
-            return tuple(m[k] for k in METRICS) + exigir_calcio_fosforo(output)
-        return tuple(m[k] for k in METRICS)
+            values += exigir_calcio_fosforo(output)
+        if request.require_absorbed_na:
+            from services.nasem_requirements import exigir_sodio
+            values += exigir_sodio(output)
+        return values
 
-    def metrics(x: np.ndarray) -> tuple[float, float, float, float]:
+    def metrics(x: np.ndarray) -> tuple[float, ...]:
         return eval_cached(tuple(float(t) for t in x))
 
     def constraints_energy(x: np.ndarray) -> float:
@@ -286,6 +293,11 @@ def formulate_diet(
         v = metrics(x)
         return (v[6] - v[7]) / max(v[7], 1.0)
 
+    def constraints_na(x: np.ndarray) -> float:
+        v = metrics(x)
+        idx = 8 if request.require_absorbed_ca_p else 4
+        return (v[idx] - v[idx + 1]) / max(v[idx + 1], 1.0)
+
     def percent_dm(x: np.ndarray, attr: str) -> float | None:
         if not comp or any(comp[f.name][attr] is None for f in feeds):
             return None
@@ -299,6 +311,8 @@ def formulate_diet(
     if request.require_absorbed_ca_p:
         constraints.extend([{"type": "ineq", "fun": constraints_ca},
                             {"type": "ineq", "fun": constraints_p}])
+    if request.require_absorbed_na:
+        constraints.append({"type": "ineq", "fun": constraints_na})
     if request.min_ndf_pct_dm is not None:
         constraints.append({"type": "ineq", "fun": lambda x: (percent_dm(x, 'ndf') - request.min_ndf_pct_dm) / 100})
     if request.min_forage_ndf_pct_dm is not None:
@@ -365,6 +379,9 @@ def formulate_diet(
         if request.require_absorbed_ca_p:
             gaps["ca_abs_g_day"] = max(0.0, m[5] - m[4])
             gaps["p_abs_g_day"] = max(0.0, m[7] - m[6])
+        if request.require_absorbed_na:
+            na_idx = 8 if request.require_absorbed_ca_p else 4
+            gaps["na_abs_g_day"] = max(0.0, m[na_idx + 1] - m[na_idx])
         if request.min_ndf_pct_dm is not None:
             gaps["ndf_pct_dm"] = max(0.0, request.min_ndf_pct_dm - percent_dm(x, 'ndf'))
         if request.min_forage_ndf_pct_dm is not None:
@@ -379,16 +396,22 @@ def formulate_diet(
                  + gaps.get("forage_ndf_pct_dm", 0) / 100)
         if request.require_absorbed_ca_p:
             score += gaps["ca_abs_g_day"] / max(m[5], 1.0) + gaps["p_abs_g_day"] / max(m[7], 1.0)
+        if request.require_absorbed_na:
+            na_idx = 8 if request.require_absorbed_ca_p else 4
+            score += gaps["na_abs_g_day"] / max(m[na_idx + 1], 1.0)
         near.append((score, objective(x), x.copy(), m, gaps))
         if (abs(float(x.sum()) - total) <= 1e-5
                 and np.all(x >= lower - 1e-6) and np.all(x <= upper + 1e-6)
                 and m[0] >= m[1] and m[2] >= m[3]
                 and (not request.require_absorbed_ca_p or (m[4] >= m[5] - 1e-7 and m[6] >= m[7] - 1e-7))
+                and (not request.require_absorbed_na or (
+                    m[8 if request.require_absorbed_ca_p else 4] >=
+                    m[9 if request.require_absorbed_ca_p else 5] - 1e-7))
                 and (request.min_forage_ndf_pct_dm is None or forage_ndf_pct(x) >= request.min_forage_ndf_pct_dm - 1e-7)
                 and (request.min_ndf_pct_dm is None or percent_dm(x, 'ndf') >= request.min_ndf_pct_dm - 1e-7)
                 and (request.max_starch_pct_dm is None or percent_dm(x, 'starch') <= request.max_starch_pct_dm + 1e-7)):
             valid.append((objective(x), x.copy(), m))
-    checked_extra = (["calcio_absorvido", "fosforo_absorvido"] if request.require_absorbed_ca_p else []) + (["fdn_forragens"] if request.min_forage_ndf_pct_dm is not None else []) + (["fdn"] if request.min_ndf_pct_dm is not None else []) + (["amido"] if request.max_starch_pct_dm is not None else [])
+    checked_extra = (["calcio_absorvido", "fosforo_absorvido"] if request.require_absorbed_ca_p else []) + (["sodio_absorvido"] if request.require_absorbed_na else []) + (["fdn_forragens"] if request.min_forage_ndf_pct_dm is not None else []) + (["fdn"] if request.min_ndf_pct_dm is not None else []) + (["amido"] if request.max_starch_pct_dm is not None else [])
     unverified = [v for v in ["fdn", "fibra_fisicamente_efetiva", "fdn_forragens", "amido", "minerais", "vitaminas", "limites_nutricionais_de_inclusao"] if v not in checked_extra]
     base = {
         "status": "experimental_sem_dieta_validada",
@@ -397,11 +420,15 @@ def formulate_diet(
         "evaluation_count": eval_cached.cache_info().misses,
         "warnings": [
             "NÃO USAR para alimentar animais: modelo parcial.",
-            ("Cálcio/fósforo ABSORVIDOS do NASEM são restrições ativas; minerais restantes, vitaminas, "
-             "fibra fisicamente efetiva e outras exigências continuam sem verificação completa."
+            ("Ca/P e Na absorvidos são restrições ativas; outros minerais, limites superiores, "
+             "vitaminas e fibra fisicamente efetiva seguem sem avaliação completa."
+             if request.require_absorbed_ca_p and request.require_absorbed_na else
+             "Ca/P absorvidos são restrições ativas; Na e demais minerais só são diagnosticados."
              if request.require_absorbed_ca_p else
-             "Ca e P totais são composição bruta. Balanços absorvidos do NASEM serão exibidos, "
-             "quando disponíveis, como diagnóstico SEM restrição automática. Outros nutrientes NÃO AVALIADOS."),
+             "Na absorvido é restrição ativa; Ca/P e demais minerais são apenas diagnosticados."
+             if request.require_absorbed_na else
+             "Balanços minerais absorvidos do NASEM são exibidos como diagnóstico sem restrição automática. "
+             "Outros nutrientes e limites superiores não avaliados."),
             "Otimização local SLSQP: não garante mínimo global.",
             "Consumo total de matéria seca foi fornecido como entrada, não previsto pelo sistema.",
             "Limites mínimo/máximo são apenas operacionais informados pelo usuário.",
@@ -488,6 +515,12 @@ def formulate_diet(
             "fosforo_absorvido": {"label": "Fósforo absorvido", "unit": "g/dia", "intake": m[6],
                 "requirement": m[7], "status": "atende", "source": "NASEM 2021 via nasem_dairy"},
         }
+    if request.require_absorbed_na:
+        na_i = 8 if request.require_absorbed_ca_p else 4
+        from_cache["sodio_absorvido"] = {
+            "label": "Sódio absorvido", "unit": "g/dia", "intake": m[na_i],
+            "requirement": m[na_i + 1], "status": "atende", "source": "NASEM 2021 via nasem_dairy",
+        }
     try:
         diet_final = pd.DataFrame({"Feedstuff": names, "kg_user": x})
         output_final = evaluator(diet_final, copy.deepcopy(animal), copy.deepcopy(equations), copy.deepcopy(infusion))
@@ -512,7 +545,7 @@ def formulate_diet(
         "status": "candidata_experimental",
         "diet": rows,
         "animal_inputs": {k: animal.get(k) for k in
-                          ("An_AgeDay", "An_Parity_rl", "An_LactDay", "An_BW", "Trg_MilkProd")},
+                          ("An_Breed", "An_AgeDay", "An_Parity_rl", "An_LactDay", "An_BW", "Trg_MilkProd")},
         "total_dm_kg_cow_day": float(x.sum()),
         "total_as_fed_kg_cow_day": float(sum(r["kg_as_fed_cow_day"] for r in rows)),
         "cost_brl_cow_day": cost,
@@ -536,7 +569,11 @@ def formulate_diet(
         "activated_rules": ([
             {"id": "R_CA_ABS", "status": "atendida", "explanation": "Cálcio absorvido >= exigência calculada no NASEM", "source": "NASEM 2021 via nasem_dairy"},
             {"id": "R_P_ABS", "status": "atendida", "explanation": "Fósforo absorvido >= exigência calculada no NASEM", "source": "NASEM 2021 via nasem_dairy"},
-        ] if request.require_absorbed_ca_p else []) + [
+        ] if request.require_absorbed_ca_p else []) + ([
+            {"id": "R_NA_ABS", "status": "atendida",
+             "explanation": "Sódio absorvido >= exigência calculada no NASEM",
+             "source": "NASEM 2021 via nasem_dairy"},
+        ] if request.require_absorbed_na else []) + [
             {"id": "R_ME", "status": "atendida", "explanation": "Energia metabolizável ingerida >= exigida no cenário avaliado"},
             {"id": "R_MP", "status": "atendida", "explanation": "Proteína metabolizável ingerida >= exigida no cenário avaliado"},
         ] + ([{"id": "R_FDN_FORRAGEM_MIN", "status": "atendida", "explanation": f"FDN de forragens {forage_ndf:.2f}% MS >= mínimo configurado {request.min_forage_ndf_pct_dm:.2f}% MS", "source": "Limite informado pelo usuário; composição NASEM, classificação explícita"}] if request.min_forage_ndf_pct_dm is not None else []) + ([{"id": "R_FDN_MIN", "status": "atendida", "explanation": f"FDN {ndf_pct:.2f}% MS >= mínimo configurado {request.min_ndf_pct_dm:.2f}% MS", "source": "Limite informado pelo usuário; composição NASEM"}] if request.min_ndf_pct_dm is not None else []) + ([{"id": "R_AMIDO_MAX", "status": "atendida", "explanation": f"Amido {starch_pct:.2f}% MS <= máximo configurado {request.max_starch_pct_dm:.2f}% MS", "source": "Limite informado pelo usuário; composição NASEM"}] if request.max_starch_pct_dm is not None else []),

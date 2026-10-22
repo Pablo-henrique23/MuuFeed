@@ -26,10 +26,9 @@ def analisar_dieta(lote, ingredientes, quantidades_mn: dict[str, float], *,
     _old_diet, animal, equations, infusion = scenario
     animal, equations = dict(animal), dict(equations)
     animal.update(lote.para_animal_nasem())
-    breed = {"holandesa": "Holstein", "holstein": "Holstein", "jersey": "Jersey"}.get(lote.raca.strip().lower())
-    if breed is None:
-        raise ValueError("A análise suporta apenas as raças Holandesa e Jersey neste protótipo.")
-    animal["An_Breed"] = breed
+    # Mesmo mapeamento validado usado pelo formulador.
+    from services.breed import para_raca_nasem
+    animal["An_Breed"] = para_raca_nasem(lote.raca)
     catalog = load_library().set_index("Fd_Name")
     rows, total_dm, cost = [], 0.0, 0.0
     ndf_mass, starch_mass, forage_ndf_mass = 0.0, 0.0, 0.0

@@ -62,3 +62,11 @@ Os antigos `LEIA-ME-V3.md`, `LEIA-ME-V4.md`, `LEIA-ME-V5.md` e demais tutoriais 
 **Preços:** valor em R$/kg MN é preço **unitário**, não somável. O total financeiro é a soma dos custos de ingrediente na coluna R$/vaca/dia.
 
 **Correção no diagnóstico mineral:** os seis macrominerais absorvidos (Ca, P, Mg, Na, Cl, K) passam a ser consultados também com Ca/P ativados; na versão anterior a leitura final mostrava somente Ca/P nesse modo. Isso não impõe automaticamente os demais minerais como restrições.
+
+## Alterações v8 (22/10/2026)
+
+- Raça enviada ao NASEM por mapeamento único: Holandesa → `Holstein`; Jersey → `Jersey`.
+- Nova restrição opcional **Na absorvido >= exigência NASEM**, separada do controle opcional Ca/P.
+- Sugestão assistida pode incluir cloreto de sódio apenas por escolha explícita, com confirmação de preço, disponibilidade e **máximo informado pelo usuário**.
+- Regras de Ca/P/Na e diagnósticos restantes são independentes; nenhuma dieta é declarada nutricionalmente completa.
+- Veja [validação do v8](docs/VALIDACAO_V8.md) e [backlog](docs/BACKLOG.md).

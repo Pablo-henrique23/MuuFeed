@@ -11,6 +11,7 @@ import math
 from models import (Indicador, ItemDieta, RegraAcionada, Restricao,
                     ResultadoFormulacao)
 from formulation_engine import FeedChoice, FormulationRequest, formulate_diet
+from services.breed import para_raca_nasem
 
 
 class NasemFormulador:
@@ -22,8 +23,10 @@ class NasemFormulador:
             return False, "; ".join(errors)
         if req.lote.estado != "Lactating Cow":
             return False, "O formulador experimental suporta apenas vacas em lactação."
-        if req.lote.raca.strip().lower() not in ("holandesa", "holstein", "jersey"):
-            return False, "Raça ainda não parametrizada neste protótipo. Escolha Holandesa ou Jersey para o NASEM."
+        try:
+            para_raca_nasem(req.lote.raca)
+        except ValueError as exc:
+            return False, str(exc)
         if len(req.ingredientes) < 2:
             return False, "Selecione pelo menos dois ingredientes disponíveis."
         dmi = getattr(req.opcoes, "consumo_ms_kg_dia", None)
@@ -50,6 +53,15 @@ class NasemFormulador:
                     return False, f"{rotulo} deve estar entre 0 e 100% da MS."
         if type(getattr(req.opcoes, "require_absorbed_ca_p", False)) is not bool:
             return False, "A verificação de cálcio/fósforo deve ser ativada ou desativada."
+        if type(getattr(req.opcoes, "require_absorbed_na", False)) is not bool:
+            return False, "A restrição de sódio deve ser ativada ou desativada."
+        # Suplementos minerais têm dose potencialmente sensível: nunca deixá-los
+        # com inclusão ilimitada ou criar doses automáticas sem validação.
+        suplementos = {"Sodium chloride (salt)", "Sodium bicarbonate"}
+        for ing in req.ingredientes:
+            if ing.nome_original in suplementos and ing.max_kg_mn is None:
+                return False, (f"Defina o máximo (kg MN/vaca/dia) de {ing.nome_pt} na tela "
+                               "Ingredientes e preços. O MuuFeed não recomenda doses minerais.")
         origem = getattr(req.opcoes, "consumo_ms_origem", "informado")
         if origem not in ("informado", "estimado_nrc2001"):
             return False, "Origem do consumo MS inválida."
@@ -73,14 +85,8 @@ class NasemFormulador:
         # não coleta; a interface deve mostrar todas as hipóteses remanescentes.
         overrides = req.lote.para_animal_nasem()
         animal.update(overrides)
-        breed_names = {"holandesa": "Holstein", "holstein": "Holstein",
-                       "jersey": "Jersey"}
-        breed = breed_names.get(req.lote.raca.strip().lower())
-        if breed:
-            animal["An_Breed"] = breed
-        elif req.lote.raca.strip():
-            # Não assumir breed default do cenário original como raça real.
-            animal["An_Breed"] = "Other"
+        # Lote.para_animal_nasem() já fornece An_Breed com mapeamento validado.
+        assert animal["An_Breed"] == para_raca_nasem(req.lote.raca)
         total_dm = float(req.opcoes.consumo_ms_kg_dia)
         animal["Trg_Dt_DMIn"] = total_dm
         equations["DMIn_eqn"] = 0
@@ -105,6 +111,7 @@ class NasemFormulador:
             max_starch_pct_dm=req.opcoes.max_starch_pct_dm,
             min_forage_ndf_pct_dm=req.opcoes.min_forage_ndf_pct_dm,
             require_absorbed_ca_p=getattr(req.opcoes, "require_absorbed_ca_p", False),
+            require_absorbed_na=getattr(req.opcoes, "require_absorbed_na", False),
         ))
         warnings = list(result.get("warnings", []))
         # O motor recebe CMS fixo; quem o estimou foi a etapa anterior, não o NASEM.
@@ -147,7 +154,7 @@ class NasemFormulador:
                 warnings.append(diagnostics["diagnostic_note"])
             gaps = diagnostics.get("closest_candidate_gaps") or {}
             names_gap = {"total_dm_kg": "diferença MS (kg)", "me_mcal_day": "déficit ME (Mcal/dia)",
-                         "mp_g_day": "déficit MP (g/dia)", "ndf_pct_dm": "déficit FDN (p.p.)",
+                         "mp_g_day": "déficit MP (g/dia)", "na_abs_g_day": "déficit sódio absorvido (g/dia)", "ndf_pct_dm": "déficit FDN (p.p.)",
                          "starch_pct_dm": "excesso amido (p.p.)", "ca_abs_g_day": "déficit cálcio absorvido (g/dia)", "p_abs_g_day": "déficit fósforo absorvido (g/dia)", "forage_ndf_pct_dm": "déficit FDN de forragens (p.p.)", "bounds_dm_kg": "violação de limite (kg MS)"}
             for key, value in gaps.items():
                 if float(value) > 1e-5:
@@ -219,7 +226,7 @@ class NasemFormulador:
                 indicators.append(Indicador("perfil_" + chave, perfil["label"],
                                              "% da MS", float(valor), None, "informativo"))
         checked = list(result.get("constraints_checked", []))
-        checked_labels = {"total_ms": "MS", "me": "ME", "mp": "MP", "fdn": "FDN", "amido": "amido", "fdn_forragens": "FDN de forragens", "calcio_absorvido": "Ca absorvido", "fosforo_absorvido": "P absorvido"}
+        checked_labels = {"total_ms": "MS", "me": "ME", "mp": "MP", "fdn": "FDN", "amido": "amido", "fdn_forragens": "FDN de forragens", "calcio_absorvido": "Ca absorvido", "fosforo_absorvido": "P absorvido", "sodio_absorvido": "Na absorvido"}
         verified = ", ".join(checked_labels[k] for k in checked if k in checked_labels)
         rules = [RegraAcionada(r["id"], r["explanation"], r.get("source") or
                                "NASEM 2021 via nasem_dairy") for r in result.get("activated_rules", [])]
