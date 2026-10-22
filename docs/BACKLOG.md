@@ -86,3 +86,17 @@ O status deve continuar **candidata experimental**. O projeto calcula apenas as 
 - [ ] Executar suíte completa no ambiente do usuário com `nasem_dairy`, `streamlit` e `pyarrow`.
 - [ ] Validar com dados reais o efeito da fonte de sódio e restrição máxima na candidata.
 - [ ] **Destinação econômica adicional**: modelar e validar categoria animal diferente (ex.: novilhas de reposição ou vacas secas). Não confundir destinação comercial com estado fisiológico e não declarar suporte fictício na entrega.
+
+## V18 — Seleção guiada por restrições (hackathon)
+
+- [x] Inserir teto global, FDN, amido e fNDF ANTES da sugestão; permitir informar quais restrições de minerais serão exigidas na etapa final.
+- [x] Pré-triagem linear de composição com fontes realmente presentes no catálogo NASEM, valores de MS/FDN/amido e preços conhecidos; descartar candidatos sem dados em vez de assumir zero.
+- [x] Apresentar conjunto de candidatos dinâmico, com variantes por perfil do lote e alternativas para confirmação do usuário.
+- [x] Verificar a pré-triagem com os ingredientes MARCADOS, não apenas com conjunto total; informar incompatibilidade antes do NASEM.
+- [x] Transferir os mesmos limites para a página Formular dieta; manter o NASEM final como verificador de ME/MP/minerais.
+- [x] Sinalizar referências de inclusão condicionais quando teto geral for mais permissivo, sem inventar dose segura.
+- [ ] Executar `python scripts/verificar_selecao_guiada_v18.py` e suíte completa no ambiente do usuário com NASEM/Streamlit reais.
+- [ ] Testar cenário com teto 30%, FDN 25%, amido 30%, FDNf 19%, com e sem suplementos confirmados.
+- [ ] Demonstração de inviabilidade de NASEM com aviso explicativo; a pré-triagem não faz verificação completa e não deve mentir.
+- [ ] Futuro: pré-seleção com ME/MP e minerais via NASEM real em rotina de busca iterativa, com custo computacional medido e limites de execução; **não implementado nesta versão**.
+- [ ] Futuro: vitaminas A/D/E com suprimento declarado e dados de suplementos reais; microminerais e limites superiores, exigem validação.

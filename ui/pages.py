@@ -12,9 +12,14 @@ from services.dmi_estimator import estimar_do_lote
 from services.demo_scenario import cenario_demonstrativo
 from services.financeiro import resumo_financeiro
 from services.ingredient_suggestion import sugerir_ingredientes
+from services.constraint_guided_suggestion import (
+    LimitesTriagem, conferir_selecao_quimica, sugerir_por_restricoes,
+)
 from services.sodium_guidance import aviso_fonte_sodio
+from services.feed_science import referencia_inclusao
 from services.pdf_report import gerar_relatorio_pdf
 from services.rotulos import rotulo_legivel, eh_chave_tecnica, nao_avaliadas_unicas
+from services.table_format import preparar_tabela_indicadores_analise
 from services.formulation_service import executar_formulacao, formulador_conectado
 from ui.state import adicionar, get_catalogo, ir_para, montar_requisicao
 from ui.theme import banner, brl, card, num
@@ -176,30 +181,82 @@ def pagina_sugestao_automatica() -> None:
     st.title("Sugestão automática de ingredientes")
     st.caption("Modo assistido: o MuuFeed apresenta ingredientes candidatos e você confirma "
                "disponibilidade e preços antes de formular a dieta.")
-    st.info("**Como funciona:** seis ingredientes iniciais são candidatos fixos. "
-            "Opcionalmente o lote acrescenta alternativas por critérios explícitos de "
-            "produção e dias de lactação — isso NÃO é uma recomendação nutricional validada. "
-            "Os preços são ilustrativos. **As quantidades e exigências são calculadas "
-            "com o NASEM somente depois da sua confirmação**.")
+    st.info("Defina os limites para receber sugestões de ingredientes conforme o lote. "
+            "Depois confirme disponibilidade e preços; a formulação verifica os requisitos nutricionais "
+            "implementados. A pré-seleção não garante uma dieta completa.")
     if ss.get("lote") is None:
         st.warning("Cadastre e salve o lote primeiro.")
         if st.button("Ir ao lote", key="assistir_lote"):
             ir_para("Lote")
         return
+    pre = ss.setdefault("assistido_restricoes", {})
+    modo_guiado = st.checkbox(
+        "Selecionar candidatos dinamicamente pelo lote e pelos limites (pré-triagem experimental)",
+        value=True, key="assistido_guiado",
+        help="Vasculha os alimentos precificados do catálogo, aplica uma programação linear de "
+             "triagem para FDN, amido, FDNf e teto e apresenta também alternativas. "
+             "Não avalia antecipadamente energia, MP, absorção de minerais ou segurança nutricional.")
+    st.subheader("1. Restrições antes da sugestão")
+    st.caption("Estes mesmos valores serão transferidos à formulação. Deixe vazios os limites "
+               "que não foram definidos para o cenário.")
+    c1, c2 = st.columns(2)
+    teto_pre = c1.number_input(
+        "Máxima participação por ingrediente (% da MS)", min_value=1.0,
+        max_value=100.0, value=pre.get("teto"), step=5.0, format="%.1f",
+        key="assistido_pre_teto", help="Teto operacional, NÃO um limite nutricional seguro.")
+    fdn_pre = c2.number_input(
+        "FDN total mínima (% da MS)", min_value=0.0, max_value=100.0,
+        value=pre.get("fdn"), step=0.5, format="%.2f", key="assistido_pre_fdn")
+    c3, c4 = st.columns(2)
+    amido_pre = c3.number_input(
+        "Amido máximo (% da MS)", min_value=0.0, max_value=100.0,
+        value=pre.get("amido"), step=0.5, format="%.2f", key="assistido_pre_amido")
+    fn_pre = c4.number_input(
+        "FDN de forragens mínima (% da MS)", min_value=0.0, max_value=100.0,
+        value=pre.get("fndf"), step=0.5, format="%.2f", key="assistido_pre_fndf",
+        help="Exemplo NASEM 2021 (TMR sob hipóteses específicas): 19% fNDF, "
+             "25% FDN total, 30% amido máximo. Não é recomendação universal.")
+    c5, c6, c7 = st.columns(3)
+    ca_p_pre = c5.checkbox("Exigir Ca/P absorvidos", value=pre.get("ca_p", False), key="assistido_pre_ca_p")
+    na_pre = c6.checkbox("Exigir Na absorvido", value=pre.get("na", False), key="assistido_pre_na")
+    mg_pre = c7.checkbox("Exigir Mg/Cl/K absorvidos", value=pre.get("mg", False), key="assistido_pre_mg")
+    pre = {"teto": teto_pre, "fdn": fdn_pre, "amido": amido_pre,
+           "fndf": fn_pre, "ca_p": ca_p_pre, "na": na_pre, "mg": mg_pre}
+    ss["assistido_restricoes"] = pre
+    st.subheader("2. Candidatos do catálogo")
+    # Compatibilidade com a curadoria legada; a seleção dinâmica é a padrão.
     ampliar_pelo_lote = st.checkbox(
         "Mostrar alternativas adicionais escolhidas por regras do lote (experimental)",
         value=True, key="assistido_contextual",
-        help="Acrescenta três alternativas para comparação com base em produção de leite "
-             "e dias de lactação. Não estima segurança nutricional nem disponibilidade. "
-             "Essas alternativas começam desmarcadas e precisam de confirmação.")
+        help="Usado apenas no modo legado; três alternativas por produção e dias de lactação.") if not modo_guiado else False
     incluir_fonte_sodio = st.checkbox(
         "Incluir sal (cloreto de sódio) como ingrediente candidato opcional",
-        value=bool(ss.get("form_sodio_abs", False)), key="assistido_sodio",
-        help="O ingrediente consta na biblioteca NASEM; seu uso exige confirmar disponibilidade, "
-             "preço e um máximo operacional definido por responsável técnico. "
-             "Não é uma prescrição ou quantidade recomendada.")
-    sugestoes, avisos = sugerir_ingredientes(ss["lote"], cat, incluir_fonte_sodio=incluir_fonte_sodio,
-                                              ampliar_pelo_lote=ampliar_pelo_lote)
+        value=bool(ss.get("form_sodio_abs", False) or na_pre), key="assistido_sodio",
+        help="O sal exige confirmação da disponibilidade, preço e teto individual definido "
+             "por profissional. Nunca é pré-selecionado nem recebe dose automática.")
+    if modo_guiado:
+        resultado_pre = sugerir_por_restricoes(
+            ss["lote"], cat, LimitesTriagem(
+                min_ndf_pct_dm=fdn_pre, max_starch_pct_dm=amido_pre,
+                min_forage_ndf_pct_dm=fn_pre, max_share_ingredient_pct_dm=teto_pre,
+                require_ca_p=ca_p_pre, require_na=na_pre, require_mg_cl_k=mg_pre),
+            selecionados=ss["selecionados"])
+        sugestoes, avisos = list(resultado_pre.sugestoes), list(resultado_pre.avisos)
+        if incluir_fonte_sodio and resultado_pre.composicao_possivel:
+            extras, _ = sugerir_ingredientes(ss["lote"], cat, incluir_fonte_sodio=True,
+                                            ampliar_pelo_lote=False)
+            sugestoes.extend(s for s in extras if s.nome_original == "Sodium chloride (salt)"
+                            and s.uid not in {x.uid for x in sugestoes})
+        if resultado_pre.composicao_possivel:
+            st.success(f"Pré-triagem química encontrou combinação para os limites de FDN/amido/FDNf "
+                       f"e teto entre {resultado_pre.candidatos_examinados} alimentos "
+                       "com dados e preço disponíveis. **ME/MP/minerais ainda NÃO verificados.**")
+        else:
+            st.error("Não foi encontrada combinação na pré-triagem química para os limites informados. "
+                     "Isso pode mudar com novos ingredientes e preços; não significa inviabilidade nutricional definitiva.")
+    else:
+        sugestoes, avisos = sugerir_ingredientes(ss["lote"], cat, incluir_fonte_sodio=incluir_fonte_sodio,
+                                                  ampliar_pelo_lote=ampliar_pelo_lote)
     if ampliar_pelo_lote:
         adicionais = [sug.nome_pt for sug in sugestoes if sug.opcional and sug.grupo != "Mineral"]
         if adicionais:
@@ -224,18 +281,64 @@ def pagina_sugestao_automatica() -> None:
                        "Justificativa da sugestão": sug.motivo,
                        "Preço (R$/kg MN)": atual.get("preco", sug.preco_ilustrativo)})
     editado = st.data_editor(
-        pd.DataFrame(linhas), hide_index=True, use_container_width=True, key=f"sugestao_editor_{int(incluir_fonte_sodio)}_{int(ampliar_pelo_lote)}",
+        pd.DataFrame(linhas), hide_index=True, use_container_width=True, key=f"sugestao_editor_{int(incluir_fonte_sodio)}_{int(ampliar_pelo_lote)}_{int(modo_guiado)}_{abs(hash(str(pre)))}",
         disabled=["uid", "Ingrediente", "Grupo", "Justificativa da sugestão"],
         column_config={"uid": None, "Incluir": st.column_config.CheckboxColumn("Disponível e incluir"),
                        "Preço (R$/kg MN)": st.column_config.NumberColumn(min_value=0.0, format="%.2f")})
     st.caption("A coluna 'Disponível e incluir' requer confirmação do produtor; preços podem ser editados aqui "
                "ou na tela Ingredientes e preços. A lista final é somente um conjunto candidato.")
+    if modo_guiado:
+        # Referências de literatura são contexto, nunca teto automaticamente imposto.
+        refs = []
+        for _, linha in editado.iterrows():
+            if not bool(linha["Incluir"]):
+                continue
+            nome = next((s.nome_original for s in sugestoes if s.uid == linha["uid"]), None)
+            if nome is None:
+                continue
+            valor_ref, condicoes, fonte_ref = referencia_inclusao(nome)
+            if valor_ref is not None:
+                refs.append({"Ingrediente": linha["Ingrediente"], "Referência (% MS)": valor_ref,
+                             "Condições/alerta": condicoes, "Fonte": fonte_ref})
+                if teto_pre is not None and float(teto_pre) > float(valor_ref):
+                    st.warning(f"{linha['Ingrediente']}: o teto uniforme de {teto_pre:.1f}% "
+                               f"é maior que a referência ORIENTATIVA de {valor_ref:.1f}% da MS "
+                               "citada na literatura para contexto específico. Não significa "
+                               "que qualquer uma dessas porcentagens seja universalmente segura.")
+        if refs:
+            with st.expander("Referências condicionais de inclusão dos ingredientes marcados"):
+                st.dataframe(pd.DataFrame(refs), hide_index=True, use_container_width=True)
+                st.caption("Valores bibliográficos não são recomendações nem limites automáticos; "
+                           "o responsável técnico deve validar cada alimento e a dieta.")
+        ids_marcados = [str(linha["uid"]) for _, linha in editado.iterrows()
+                        if bool(linha["Incluir"]) and linha["uid"] in {s.uid for s in resultado_pre.sugestoes}]
+        precos_checagem = dict(ss["selecionados"])
+        for _, linha in editado.iterrows():
+            if pd.notna(linha["Preço (R$/kg MN)"]):
+                precos_checagem[str(linha["uid"])] = {
+                    "preco": float(linha["Preço (R$/kg MN)"]), "disponivel": bool(linha["Incluir"])}
+        if ids_marcados:
+            passou_quimica, diagnostico_quimica = conferir_selecao_quimica(
+                cat, LimitesTriagem(min_ndf_pct_dm=fdn_pre, max_starch_pct_dm=amido_pre,
+                    min_forage_ndf_pct_dm=fn_pre, max_share_ingredient_pct_dm=teto_pre),
+                ids_marcados, precos=precos_checagem)
+            if passou_quimica:
+                st.success("**Triagem dos ingredientes marcados:** " + diagnostico_quimica)
+            else:
+                st.warning("**Triagem dos ingredientes marcados:** " + diagnostico_quimica)
+        else:
+            passou_quimica = False
+            st.warning("Marque alimentos comuns suficientes para formar uma candidata.")
     if ss["selecionados"]:
         st.warning("Você já possui ingredientes selecionados. Ao confirmar, a lista atual será SUBSTITUÍDA "
                    "pelos candidatos marcados; os preços previamente editados desses mesmos alimentos são preservados.")
     confirmar = st.checkbox("Confirmei a disponibilidade dos ingredientes marcados e revisei seus preços.",
                             key="assistido_confirma")
     if st.button("Usar ingredientes confirmados", type="primary", disabled=not confirmar):
+        if modo_guiado and not passou_quimica:
+            st.error("Esta seleção ainda não passou pela pré-triagem química. Marque outras "
+                     "alternativas ou revise os limites; também é possível usar o modo manual.")
+            return
         novos = {}
         for _, linha in editado.iterrows():
             if not bool(linha["Incluir"]):
@@ -256,6 +359,11 @@ def pagina_sugestao_automatica() -> None:
             st.error("Confirme pelo menos dois ingredientes candidatos para tentar a formulação.")
             return
         ss["selecionados"] = novos
+        if modo_guiado:
+            # Persistência independente das chaves dos widgets do Streamlit.
+            # O app pode remover state de widgets ao trocar de página;
+            # a aplicação dos limites ocorre apenas ao abrir Formular dieta.
+            ss["assistido_restricoes_para_formular"] = dict(pre)
         ss["resultado"] = None
         ss["requisicao_resultado"] = None
         ir_para("Ingredientes e preços")
@@ -339,6 +447,16 @@ def pagina_ingredientes() -> None:
 # ---------------------------------------------------------------- Formular
 def pagina_formular() -> None:
     ss = st.session_state
+    pendente = ss.pop("assistido_restricoes_para_formular", None)
+    if pendente is not None:
+        # Aplicar ANTES de montar os widgets; mantém o mesmo cenário de triagem.
+        for chave, campo in (
+            ("form_share_max", "teto"), ("form_fdn_min", "fdn"),
+            ("form_amido_max", "amido"), ("form_fdn_forragem_min", "fndf"),
+            ("form_minerais_abs", "ca_p"), ("form_sodio_abs", "na"),
+            ("form_mg_cl_k_abs", "mg"),
+        ):
+            ss[chave] = pendente.get(campo)
     st.title("Formular dieta")
     st.markdown("**Objetivo:** minimizar o custo diário da dieta por vaca, respeitando as exigências e restrições "
                 "nutricionais implementadas no sistema especialista.")
@@ -600,8 +718,10 @@ def pagina_analisar_dieta() -> None:
                                 "Situação": "Atende" if mineral["status"] == "atende" else "Abaixo da exigência"})
     st.caption("Composição bruta (Ca/P total) difere de nutrientes absorvidos; quando disponíveis, "
                "as exigências minerais são do próprio NASEM.")
-    st.dataframe(pd.DataFrame(indicadores), hide_index=True, use_container_width=True,
-                 column_config={"Ingestão": st.column_config.NumberColumn(format="%.2f")})
+    st.dataframe(preparar_tabela_indicadores_analise(indicadores), hide_index=True,
+                 use_container_width=True,
+                 column_config={"Ingestão": st.column_config.NumberColumn(format="%.2f"),
+                                "Exigência": st.column_config.NumberColumn(format="%.2f")})
     for warning in res["alerts"]:
         st.caption("• " + warning)
     st.caption("A dieta analisada não foi formulada pelo motor. Os resultados não substituem avaliação profissional.")

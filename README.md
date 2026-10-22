@@ -129,3 +129,11 @@ permite rever os ingredientes. O sal é **opcional**, requer confirmação de
 preço, disponibilidade e teto por responsável técnico e não é prescrito.
 Os aspectos não avaliados exibidos no resultado são **limitações de escopo**;
 não devem ser lidos como causa automática da ausência de candidata.
+
+### Seleção guiada por lote e restrições (v18 — hackathon)
+
+Na página **Sugestão automática**, o modo guiado (padrão) pede **teto de participação, FDN mínima, amido máximo, FDN de forragens mínima e opções de minerais antes da lista**. Ele consulta o catálogo e preços disponíveis, exclui ingredientes especiais que exigem teto individual e usa programação linear para **pré-triagem de composição química**; seleciona opções e alternativas, considerando produção e dias de lactação. O produtor confirma disponibilidade e preços, e os mesmos limites são encaminhados à página **Formular dieta**, onde o modelo NASEM e o SLSQP realizam a verificação nutricional experimental. O modo antigo permanece disponível.
+
+**Não confundir pré-triagem com formulação final.** A etapa linear não verifica exigências de energia, proteína metabolizável ou minerais absorvidos; o NASEM final pode legitimamente não encontrar candidata. Não há preços coletados automaticamente, nem inclusão automática de suplementos, nem dados bromatológicos medidos pelo programa. Referências de inclusão de literatura são orientativas e condicionais, não máximos seguros.
+
+Veja `docs/SELECAO_ORIENTADA_V18.md`; rode `python scripts/verificar_selecao_guiada_v18.py` no ambiente com `nasem_dairy` instalado antes de demonstrar a funcionalidade.
