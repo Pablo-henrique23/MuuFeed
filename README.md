@@ -6,6 +6,8 @@ O MuuFeed combina uma biblioteca de ingredientes baseada no **NASEM (2021)**, um
 
 > **Escopo:** protótipo experimental de apoio à decisão. Uma formulação que atende às restrições ativas **não é uma prescrição nutricional completa**. O modelo não verifica automaticamente todas as vitaminas, microminerais, limites superiores, fibra fisicamente efetiva ou a composição real de cada lote de alimento. A revisão de médico-veterinário ou zootecnista é necessária antes de utilizar uma dieta em animais.
 
+Confira a **[Documentação completa](docs/DOCUMENTACAO_COMPLETA.md)**.
+
 ## Instalação (Python 3.12)
 
 ```bash
@@ -88,8 +90,6 @@ O teste no ambiente do autor alcançou **246 testes aprovados antes desta audito
 ## Documentos de entrega
 
 - [**Documentação completa — fluxo, fórmulas, arquitetura e fontes**](docs/DOCUMENTACAO_COMPLETA.md)
-- [**Auditoria final: achados, testes, limitações e prioridades**](docs/AUDITORIA_FINAL_HACKATHON.md)
-- [**Limpeza segura e arquivos removíveis**](docs/LIMPEZA_ENTREGA.md)
 - [**Fontes originais reunidas durante o desenvolvimento**](referencias.txt)
 
 ## Limitações principais
