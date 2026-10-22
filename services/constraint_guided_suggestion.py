@@ -195,17 +195,25 @@ def sugerir_por_restricoes(lote, catalogo, limites: LimitesTriagem, *,
         if len(obrigatorios) >= max(4, min_necessarios):
             break
         obrigatorios.add(i)
-    ordered = sorted(primarios, key=lambda i: (i not in obrigatorios, grupos.index(pool[i]["grupo"]), score(pool[i])))
+    # Exibir todos os elegíveis. Os primários vêm primeiro; os demais
+    # são opções adicionais, desmarcadas até o usuário confirmá-las.
+    restantes = [i for i in range(len(pool)) if i not in primarios]
+    ordered = sorted(primarios, key=lambda i: (i not in obrigatorios, grupos.index(pool[i]["grupo"]), score(pool[i]))) + sorted(
+        restantes, key=lambda i: (grupos.index(pool[i]["grupo"]), score(pool[i]))
+    )
     sugestoes = []
     for i in ordered:
         p = pool[i]
         lp_used = i in ativos
-        motivo = ("Selecionado na pré-triagem matemática dos limites de composição; CONFIRMAR disponibilidade e revisar inclusão."
-                  if lp_used else
-                  "Alternativa complementar por perfil do lote, composição da biblioteca e custo ilustrativo; não é indicação de uso nutricional.")
+        if lp_used:
+            motivo = "Selecionado na pré-triagem matemática; CONFIRMAR disponibilidade e revisar inclusão."
+        elif i in primarios:
+            motivo = "Alternativa destacada por perfil do lote, composição e custo ilustrativo; não é indicação de uso nutricional."
+        else:
+            motivo = "Ingrediente adicional elegível à pré-triagem, disponível para seleção manual; inicialmente desmarcado."
         sugestoes.append(Sugestao(p["uid"], p["nome"], p["pt"], p["grupo"], motivo,
                                  p["preco"], opcional=i not in obrigatorios))
-    avisos.append(f"Pré-triagem química encontrou uma combinação de referência entre {len(pool)} alimentos com dados e preço conhecidos. São exibidas {len(sugestoes)} opções (inclusive reservas). **Não há validação antecipada de energia, proteína metabolizável, sódio ou demais minerais**: isso ocorrerá na formulação NASEM após sua confirmação.")
+    avisos.append(f"Pré-triagem química encontrou uma combinação de referência entre {len(pool)} alimentos com dados e preço conhecidos. São exibidos todos os {len(sugestoes)} ingredientes elegíveis; {len(primarios)} são destacados como candidatos principais e os demais ficam desmarcados. **Não há validação antecipada de energia, proteína metabolizável, sódio ou demais minerais**: isso ocorrerá na formulação NASEM após sua confirmação.")
     if limites.require_na:
         avisos.append("Você exigiu sódio: o conjunto de alimentos comuns não garante atendimento. Avalie uma fonte de sódio disponível e seu teto com responsável técnico; a inclusão do sal nunca é automática.")
     if limites.require_ca_p or limites.require_mg_cl_k:

@@ -126,4 +126,8 @@ def test_lista_realmente_varia_com_lote_quando_existem_opcoes():
     high=sugerir_por_restricoes(LoteStub(leite_kg_dia=38,dias_lactacao=45),cat,LimitesTriagem())
     assert low.composicao_possivel and high.composicao_possivel
     a={s.nome_original for s in low.sugestoes};b={s.nome_original for s in high.sugestoes}
-    assert a != b
+    assert a == b  # Todos os ingredientes elegíveis estão visíveis.
+    assert len(a) == low.candidatos_examinados == high.candidatos_examinados
+    destaques_low = {s.uid for s in low.sugestoes if "Ingrediente adicional elegível" not in s.motivo}
+    destaques_high = {s.uid for s in high.sugestoes if "Ingrediente adicional elegível" not in s.motivo}
+    assert destaques_low != destaques_high
