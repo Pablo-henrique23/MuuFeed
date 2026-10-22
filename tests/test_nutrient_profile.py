@@ -33,7 +33,9 @@ def test_ausencia_de_composicao_nao_vira_zero():
 
 def test_rejeita_ingrediente_faltante_e_dados_invalidos():
     lib = pd.DataFrame([{"Fd_Name":"A", "Fd_CP":130}])
-    assert calcular_perfil(lib,{"A":1})["proteina_bruta"]["pct_dm"] == 130
+    assert calcular_perfil(lib,{"A":1})["proteina_bruta"]["pct_dm"] is None
+    nnp = pd.DataFrame([{"Fd_Name":"Urea", "Fd_CP":281}])
+    assert calcular_perfil(nnp,{"Urea":1})["proteina_bruta"]["pct_dm"] == 281
     with pytest.raises(ValueError, match="ausente"):
         calcular_perfil(lib, {"B": 1})
 

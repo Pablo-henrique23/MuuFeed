@@ -55,6 +55,12 @@ def classificar_forragem(
     por_categoria = (True if categoria in _FORAGE_CATEGORIES else
                      False if categoria in _NONFORAGE_CATEGORIES else None)
     if por_tipo is not None and por_categoria is not None and por_tipo != por_categoria:
+        # Caso documentado no catálogo NASEM 2021: "Alfalfa meal" é
+        # "Forage" em Fd_Type, mas "Plant Protein" em Fd_Category.
+        # A categoria indica papel proteico e não revoga a origem vegetal
+        # da FDN. Isso NÃO avalia fibra fisicamente efetiva (moagem).
+        if name == "Alfalfa meal" and por_tipo is True and tipo == "forage" and categoria == "plant protein":
+            return True, "curadoria_nasem_alfalfa_tipo_prevalece"
         return None, "conflito_tipo_categoria_nasem"
     if por_tipo is not None:
         return por_tipo, "Fd_Type"

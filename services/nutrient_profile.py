@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import pandas as pd
+from services.feed_science import proteina_bruta_valida
 
 # Apenas colunas do catálogo NASEM expressas em % da matéria seca.
 # FDN, amido, Ca e P já são calculados separadamente no motor.
@@ -55,10 +56,12 @@ def calcular_perfil(catalogo: pd.DataFrame, quantidades_ms: dict[str, float]) ->
                 if kg == 0:
                     continue
                 valor = pd.to_numeric(dados.at[nome, coluna], errors="coerce")
-                # Proteína bruta pode superar 100% em ingredientes NPN (equivalente proteico),
-                # por exemplo sais de amônio; não confundir com porcentagem física de massa.
-                teto = 300 if key == "proteina_bruta" else 100
-                if pd.isna(valor) or not math.isfinite(float(valor)) or not 0 <= float(valor) <= teto:
+                # Equivalente proteico >100% é legítimo APENAS em fontes NNP
+                # reconhecidas, não em ingredientes normais desconhecidos.
+                valido = (proteina_bruta_valida(nome, float(valor))
+                          if key == "proteina_bruta" and pd.notna(valor)
+                          else pd.notna(valor) and 0 <= float(valor) <= 100)
+                if pd.isna(valor) or not math.isfinite(float(valor)) or not valido:
                     completo = False
                     break
                 massa_g += kg * float(valor) * 10.0

@@ -12,6 +12,7 @@ from models import (Indicador, ItemDieta, RegraAcionada, Restricao,
                     ResultadoFormulacao)
 from formulation_engine import FeedChoice, FormulationRequest, formulate_diet
 from services.breed import para_raca_nasem, utiliza_raca_generica, AVISO_RACA_GENERICA
+from services.feed_science import eh_so_bezerro, limite_explicito_obrigatorio
 
 
 class NasemFormulador:
@@ -57,13 +58,28 @@ class NasemFormulador:
             return False, "A restrição de sódio deve ser ativada ou desativada."
         if type(getattr(req.opcoes, "require_absorbed_mg_cl_k", False)) is not bool:
             return False, "A restrição de Mg/Cl/K deve ser ativada ou desativada."
-        # Suplementos minerais têm dose potencialmente sensível: nunca deixá-los
-        # com inclusão ilimitada ou criar doses automáticas sem validação.
-        suplementos = {"Sodium chloride (salt)", "Sodium bicarbonate"}
+        # O catálogo NASEM inclui premixes, gorduras concentradas, aditivos e
+        # NNP; eles não podem entrar ilimitadamente na otimização. O teto
+        # operacional continua sendo do usuário / especialista, não recomendado
+        # automaticamente pelo MuuFeed.
+        try:
+            from services.feed_catalog import carregar_biblioteca_bruta
+            bruta = carregar_biblioteca_bruta()
+            categorias = dict(zip(bruta["Fd_Name"], bruta["Fd_Category"]))
+        except (ImportError, ModuleNotFoundError):
+            # Testes unitários sem nasem_dairy: ainda exigir teto para NNP/sais
+            # conhecidos pelo identificador; integração real tem catálogo.
+            categorias = {}
         for ing in req.ingredientes:
-            if ing.nome_original in suplementos and ing.max_kg_mn is None:
-                return False, (f"Defina o máximo (kg MN/vaca/dia) de {ing.nome_pt} na tela "
-                               "Ingredientes e preços. O MuuFeed não recomenda doses minerais.")
+            if eh_so_bezerro(ing.nome_original):
+                return False, (f"{ing.nome_pt} é identificado na biblioteca como ração "
+                               "exclusiva para bezerros, não elegível para vacas em lactação.")
+            cat = categorias.get(ing.nome_original)
+            if limite_explicito_obrigatorio(ing.nome_original, cat) and ing.max_kg_mn is None:
+                return False, (f"Defina o máximo (kg MN/vaca/dia) para {ing.nome_pt} "
+                               "na tela Ingredientes e preços. Trata-se de ingrediente "
+                               "concentrado/aditivo que requer limite operacional "
+                               "definido por profissional; o MuuFeed não define dose segura.")
         origem = getattr(req.opcoes, "consumo_ms_origem", "informado")
         if origem not in ("informado", "estimado_nrc2001"):
             return False, "Origem do consumo MS inválida."

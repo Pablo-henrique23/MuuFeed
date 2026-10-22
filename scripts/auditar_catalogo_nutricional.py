@@ -19,6 +19,10 @@ if str(ROOT) not in sys.path:
 
 import pandas as pd
 from services.forage_ndf import classificar_forragem
+from services.feed_science import (
+    classificar_uso, referencia_inclusao, proteina_bruta_valida,
+    FONTES_NNP, limite_explicito_obrigatorio, FONTE_BIBLIOTECA,
+)
 
 NUTRIENTES_MONITORADOS = (
     'Fd_NDF', 'Fd_ADF', 'Fd_Lg', 'Fd_CP', 'Fd_St', 'Fd_WSC',
@@ -54,12 +58,30 @@ def auditar(biblioteca: pd.DataFrame) -> pd.DataFrame:
             num = pd.to_numeric(linha[col], errors='coerce')
             if pd.isna(num):
                 ausentes.append(col)
-            elif not math.isfinite(float(num)) or not 0 <= float(num) <= 100:
+            elif not math.isfinite(float(num)) or not (
+                proteina_bruta_valida(nome, float(num)) if col == "Fd_CP"
+                else 0 <= float(num) <= 100
+            ):
                 invalidos.append(col)
             else:
                 presentes.append(col)
         todos_ausentes = [c for c in colunas_nasem if pd.isna(linha[c])]
+        # Segunda passagem pelos 84 campos de referência: valida estrutura
+        # numérica (sem inventar o mesmo intervalo para unidades diferentes).
+        outros_nao_numericos, outros_nao_finitos = [], []
+        for col in colunas_nasem:
+            if col in NUTRIENTES_MONITORADOS or col == 'Fd_DM' or pd.isna(linha[col]):
+                continue
+            try:
+                n = float(linha[col])
+            except (TypeError, ValueError):
+                outros_nao_numericos.append(col)
+            else:
+                if not math.isfinite(n):
+                    outros_nao_finitos.append(col)
         registro_repetido = bool(uid_duplicado.iloc[pos] or nome_duplicado.iloc[pos])
+        grupo, nota_uso, fonte_uso = classificar_uso(nome, linha['Fd_Category'])
+        referencia_pct, condicoes, fonte_limite = referencia_inclusao(nome)
         linhas.append({
             'UID': linha['UID'], 'nome_nasem': nome,
             'tipo_nasem': linha['Fd_Type'], 'categoria_nasem': linha['Fd_Category'],
@@ -77,7 +99,18 @@ def auditar(biblioteca: pd.DataFrame) -> pd.DataFrame:
             'nutrientes_monitorados': len(NUTRIENTES_MONITORADOS),
             'nutrientes_ausentes': '; '.join(ausentes),
             'nutrientes_invalidos': '; '.join(invalidos),
-            'situacao': ('REVISAO_NECESSARIA' if forage is None or not dm_ok or invalidos or registro_repetido
+            'proteina_bruta_equivalente_nnp': nome in FONTES_NNP,
+            'uso_lactacao_triagem': grupo,
+            'alerta_uso': nota_uso,
+            'fonte_alerta': fonte_uso,
+            'exige_maximo_explicito': limite_explicito_obrigatorio(nome, linha['Fd_Category']),
+            'referencia_inclusao_tmr_pct_ms': referencia_pct,
+            'condicoes_da_referencia': condicoes,
+            'fonte_inclusao': fonte_limite,
+            'fonte_classificacao': FONTE_BIBLIOTECA,
+            'campos_adicionais_nao_numericos': '; '.join(outros_nao_numericos),
+            'campos_adicionais_nao_finitos': '; '.join(outros_nao_finitos),
+            'situacao': ('REVISAO_NECESSARIA' if forage is None or not dm_ok or invalidos or registro_repetido or outros_nao_numericos or outros_nao_finitos
                          else 'OK_COM_LACUNAS' if ausentes else 'OK'),
         })
     return pd.DataFrame(linhas)
@@ -98,6 +131,7 @@ def main() -> int:
     st_ok = int(tabela['amido_disponivel'].sum())
     dm_ok = int(tabela['ms_valida'].sum())
     revisao = tabela[tabela['situacao'] == 'REVISAO_NECESSARIA']
+    alertas_uso = int((tabela['uso_lactacao_triagem'] != 'NUTRICIONAL_A_VALIDAR').sum())
     campos = int(tabela['total_campos_nasem'].max()) if n else 0
     print(f'Cobertura: {campos} colunas NASEM examinadas por ingrediente; '
           'valores ausentes são apenas reportados.')
@@ -106,6 +140,11 @@ def main() -> int:
     print(f'FDN total cadastrada: {ndf_ok}/{n} | amido cadastrado: {st_ok}/{n} '
           '(ausência não é zero)')
     print(f'Arquivo de auditoria: {saida.resolve()}')
+    print(f'Auditoria sem valores alterados: {len(tabela)} alimentos; '
+          f'{alertas_uso} com atenção específica de uso, '
+          f'{int(tabela["exige_maximo_explicito"].sum())} exigem teto explícito se selecionados.')
+    print('Referências individuais no CSV são guias condicionais para consulta; '
+          'NÃO são máximos de segurança impostos automaticamente.')
     if n != 284:
         print(f'AVISO: Esperávamos 284 itens na versão testada; a biblioteca instalada possui {n}.')
     if not revisao.empty:
@@ -116,6 +155,7 @@ def main() -> int:
         print('Não declarar catálogo integralmente classificado antes de corrigir as pendências.')
         return 2
     print('OK: todos os itens têm classificação fNDF e MS válida, sem valores nutricionais inválidos.')
+    print('ATENÇÃO: OK na auditoria não equivale a alimento liberado para inclusão sem avaliação.')
     print('ATENÇÃO: nutrientes ausentes são registrados, não substituídos nem validados automaticamente.')
     return 0
 

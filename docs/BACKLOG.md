@@ -57,3 +57,13 @@ O status deve continuar **candidata experimental**. O projeto calcula apenas as 
 - [x] Alternativas contextuais experimentais no modo assistido (heurística declarada; extras desmarcados).
 - [ ] Sugestão nutricionalmente personalizada e validada: considerar disponibilidade, composição, restrições técnicas e custo real; ainda NÃO implementada.
 - [ ] Limites nutricionais de inclusão por ingrediente/categoria, com referência veterinária/zootécnica; teto operacional atual não substitui isso.
+
+### V14 — Revisão científica do catálogo
+
+- [x] Tratar equivalente de proteína bruta em fontes NNP sem falso positivo de 100%.
+- [x] Curadoria explícita de `Alfalfa meal`: `Fd_Type=Forage`, `Fd_Category=Plant Protein`; fNDF química ≠ peNDF.
+- [x] Auditar 84 campos NASEM por alimento quanto à presença/tipo numérico, MS e 15 nutrientes monitorados.
+- [x] Distinguir ingredientes exclusivos de bezerros e exigir teto operacional explícito para aditivos, premixes minerais/vitamínicos, fontes NNP e suplementos de gordura.
+- [x] Associar fontes científicas rastreáveis e limites **indicativos, condicionais** somente para exemplos com estudos disponíveis.
+- [ ] Completar teores ausentes com resultados laboratoriais específicos ou fontes com equivalência de unidade, processamento e lote demonstrada; **não inventar zeros**.
+- [ ] Implantar análise de limites superiores de todos os nutrientes, água, micotoxinas, DCAD e peNDF antes de uso animal; não concluído para o hackathon.
