@@ -9,7 +9,7 @@ from tests.factories import CUSTO_VACA, ingredientes_teste, resultado_teste
 from tests.test_contracts import lote_ok
 
 AGORA = datetime(2026, 10, 20, 21, 5)
-EXP = "CANDIDATA EXPERIMENTAL — NÃO É DIETA NUTRICIONALMENTE VALIDADA"
+EXP = "Candidata experimental - É necessária a revisão de um profissional"
 
 
 def paginas(pdf: bytes) -> list[str]:
@@ -51,7 +51,9 @@ def test_candidata_experimental_exporta_e_nao_vira_otimo():
     assert pdf[:5] == b"%PDF-"
     assert all(EXP in p for p in pgs), "o aviso deve aparecer em TODAS as páginas"
     t = " ".join(pgs)
-    assert t.count(EXP) >= len(pgs) + 1                   # faixa em cada página + caixa de destaque na primeira
+    assert t.count(EXP) == len(pgs)                         # faixa em cada página; caixa tem título próprio
+    assert "Candidata experimental Resultado experimental:" in pgs[0]
+    assert "Requisitos sem limites verificados:" not in pgs[0]
     assert "Dieta candidata experimental" in t and "3. Dieta candidata experimental" in t
     assert "3. Dieta formulada" not in t
     assert "Candidata experimental" in t and "não declara esta dieta como nutricionalmente completa" in t
@@ -155,16 +157,20 @@ def test_aviso_experimental_reflete_limites_nutricionais_ativados():
     t = texto(pdf)
     cabecalho = t[:t.index("1. Identificação")]
     assert "Fibra, amido, minerais, vitaminas e limites de inclusão não foram avaliados" not in t
-    assert "Requisitos sem limites verificados:" in cabecalho
-    assert "Fibra fisicamente efetiva" in cabecalho and "Minerais" in cabecalho
-    assert "Fibra em detergente neutro (FDN)" not in cabecalho
+    assert "Requisitos sem limites verificados:" not in cabecalho
+    assert "Fibra fisicamente efetiva" not in cabecalho and "Minerais" not in cabecalho
+    assert "Resultado experimental: atende somente às restrições efetivamente verificadas." in cabecalho
     assert "R_AMIDO_MAX" in t
     assert all(TEXTO_EXPERIMENTAL in pagina for pagina in paginas(pdf))
 
-def test_aviso_sem_limites_identifica_fdn_e_amido_nao_verificados():
+def test_aviso_sem_limites_exibe_pendencias_apenas_na_secao_de_restricoes():
     res = _res_formato_do_motor()
     pdf = gerar_relatorio_pdf(res, lote_ok(), ingredientes_teste(), None, AGORA)
-    cabecalho = texto(pdf).split("1. Identificação")[0]
-    assert "Fibra em detergente neutro (FDN)" in cabecalho
-    assert "Amido" in cabecalho
-    assert "Requisitos sem limites verificados:" in cabecalho
+    completo = texto(pdf)
+    cabecalho = completo.split("1. Identificação")[0]
+    secao_restricoes = completo[completo.index("6. Restrições"):completo.index("7. Regras acionadas")]
+    assert "Fibra em detergente neutro (FDN)" not in cabecalho
+    assert "Amido" not in cabecalho
+    assert "Requisitos sem limites verificados:" not in cabecalho
+    assert "Fibra em detergente neutro (FDN)" in secao_restricoes
+    assert "Amido" in secao_restricoes

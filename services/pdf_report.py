@@ -31,7 +31,8 @@ ZEBRA, VERMELHO, AMBAR = colors.HexColor("#F1F6F2"), colors.HexColor("#B42318"),
 AVISO_PROFISSIONAL = "Esta formulação não substitui a avaliação de médico-veterinário ou zootecnista."
 EXPORTAVEIS = {"otimo": "Dieta formulada", "candidata_experimental": "Dieta candidata experimental",
                "demonstracao": "Cenário demonstrativo"}
-TEXTO_EXPERIMENTAL = "CANDIDATA EXPERIMENTAL — NÃO É DIETA NUTRICIONALMENTE VALIDADA"
+TEXTO_EXPERIMENTAL = "Candidata experimental - É necessária a revisão de um profissional"
+TITULO_CAIXA_EXPERIMENTAL = "Candidata experimental"
 SITUACAO = {"atende": "Atende", "viola": "Não atende", "nao_avaliado": "Não avaliado",
             "informativo": "Informativo"}
 
@@ -210,14 +211,11 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
                              ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 6),
                              ("BOTTOMPADDING", (0, 0), (-1, -1), 6)])]
     if exp:
-        # Derivado do resultado (não de uma lista fixa): FDN e amido podem estar verificados
-        # quando seus limites opcionais foram informados pelo usuário.
-        pendentes = [nome for nome, _ in nao_avaliadas_unicas(resultado)]
-        descricao_pendencias = ("Requisitos sem limites verificados: " + ", ".join(pendentes) + ". ") if pendentes else ""
+        # A lista de requisitos não verificados permanece na seção 6.
+        # O destaque inicial resume o escopo sem repetir essa lista.
         aviso = ("Resultado experimental: atende somente às restrições efetivamente verificadas. "
-                 + descricao_pendencias
-                 + "Não use para alimentar animais sem revisão de um profissional.")
-        st_ += [Table([[_p(TEXTO_EXPERIMENTAL, S["demo"])], [_p(
+                 "Não use para alimentar animais sem revisão de um profissional.")
+        st_ += [Table([[_p(TITULO_CAIXA_EXPERIMENTAL, S["demo"])], [_p(
             aviso, S["aviso"])]], colWidths=[doc.width],
             style=[("BOX", (0, 0), (-1, -1), 1.2, VERMELHO), ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FDECEA")),
                    ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 5),
@@ -384,7 +382,7 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
     extras = {_fonte_legivel(r.fonte) for r in resultado.regras if r.fonte}
     fontes += sorted(extras - {'NASEM 2021; limite do usuário', 'NASEM 2021', 'Usuário'})
     fontes = list(dict.fromkeys(fontes))  # sem fontes repetidas
-    lim = ([TEXTO_EXPERIMENTAL.capitalize() + "."] if exp else []) + [AVISO_PROFISSIONAL, "O MuuFeed não declara esta dieta como nutricionalmente completa: só foram verificados os itens listados como atendidos ou violados.",
+    lim = (["Candidata experimental: avaliação nutricional parcial."] if exp else []) + [AVISO_PROFISSIONAL, "O MuuFeed não declara esta dieta como nutricionalmente completa: só foram verificados os itens listados como atendidos ou violados.",
            "A composição dos alimentos é a de referência da biblioteca; alimentos reais variam, e recomenda-se análise bromatológica.",
            "Exigências e ingestão referem-se a um animal médio do lote; variações individuais não são consideradas.",
            "Preços marcados como ilustrativos não são preços de mercado confirmados."] + list(resultado.avisos)

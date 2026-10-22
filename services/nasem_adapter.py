@@ -125,7 +125,7 @@ class NasemFormulador:
         result = formulate_diet(FormulationRequest(
             feeds=tuple(choices), animal=animal, equations=equations,
             infusion=infusion, total_dm_kg=total_dm, herd_size=req.lote.n_vacas,
-            max_iterations=100, restarts=4,
+            max_iterations=100, restarts=6,
             min_ndf_pct_dm=req.opcoes.min_ndf_pct_dm,
             max_starch_pct_dm=req.opcoes.max_starch_pct_dm,
             min_forage_ndf_pct_dm=req.opcoes.min_forage_ndf_pct_dm,
@@ -160,7 +160,8 @@ class NasemFormulador:
             warnings.append(
                 f"Diagnóstico SLSQP: {diagnostics.get('converged_attempts', 0)}/"
                 f"{diagnostics.get('attempts_count', 0)} tentativas convergiram; "
-                f"{diagnostics.get('validated_candidates', 0)} candidatas passaram na verificação. "
+                f"{diagnostics.get('validated_candidates', 0)} avaliações de candidatas passaram na verificação "
+                f"({diagnostics.get('distinct_valid_candidates', 0)} composições distintas). "
                 "O ótimo global não é garantido."
             )
             if diagnostics.get("best_improvement_vs_lowest_initial_brl") is not None:

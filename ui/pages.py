@@ -708,8 +708,6 @@ def pagina_resultados() -> None:
         graf = df.iloc[:-1]
         st.dataframe(df, hide_index=True, use_container_width=True, column_config={
             c: st.column_config.NumberColumn(format="%.2f") for c in df.columns[1:]})
-        st.caption("Preço (R$/kg MN) é unitário e não deve ser somado. O total da dieta é a soma da coluna "
-                   "Custo (R$/vaca/dia).")
         tot_ms = resumo.consumo_ms_kg
         fig = go.Figure(go.Bar(x=graf["kg MS/vaca/dia"] / tot_ms * 100, y=graf["Ingrediente"], orientation="h",
                                marker_color=VERDE, hovertemplate="%{y}: %{x:.1f}% da MS<extra></extra>"))

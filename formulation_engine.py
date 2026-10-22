@@ -456,6 +456,13 @@ def formulate_diet(
             valid.append((objective(x), x.copy(), m))
     checked_extra = (["calcio_absorvido", "fosforo_absorvido"] if request.require_absorbed_ca_p else []) + (["sodio_absorvido"] if request.require_absorbed_na else []) + (["magnesio_absorvido", "cloro_absorvido", "potassio_absorvido"] if request.require_absorbed_mg_cl_k else []) + (["fdn_forragens"] if request.min_forage_ndf_pct_dm is not None else []) + (["fdn"] if request.min_ndf_pct_dm is not None else []) + (["amido"] if request.max_starch_pct_dm is not None else [])
     unverified = [v for v in ["fdn", "fibra_fisicamente_efetiva", "fdn_forragens", "amido", "minerais", "vitaminas", "limites_nutricionais_de_inclusao"] if v not in checked_extra]
+    # Os pontos iniciais e os ótimos podem se repetir; não confundir avaliações
+    # validadas com dietas de composições realmente diferentes.
+    composicoes_distintas: list[np.ndarray] = []
+    for _, composicao, _ in valid:
+        if not any(np.max(np.abs(composicao - outra)) <= 1e-3
+                   for outra in composicoes_distintas):
+            composicoes_distintas.append(composicao)
     base = {
         "status": "experimental_sem_dieta_validada",
         "nutrition_completeness": "nao_avaliada",
@@ -482,6 +489,7 @@ def formulate_diet(
             "attempts_count": len(solver_attempts),
             "converged_attempts": sum(1 for a in solver_attempts if a["converged"]),
             "validated_candidates": len(valid),
+            "distinct_valid_candidates": len(composicoes_distintas),
             "global_optimum_guaranteed": False,
         },
         "constraints_checked": ["total_ms", "me", "mp", "limites_operacionais"] + checked_extra,

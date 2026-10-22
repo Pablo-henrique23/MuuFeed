@@ -54,7 +54,7 @@ def test_financas_consistentes_com_motor_real(res, req):
 def test_pdf_da_candidata_real(res, req):
     pdf = gerar_relatorio_pdf(res, req.lote, req.ingredientes, None)
     pgs = [" ".join(p.extract_text().split()) for p in PdfReader(io.BytesIO(pdf)).pages]
-    assert all("CANDIDATA EXPERIMENTAL — NÃO É DIETA NUTRICIONALMENTE VALIDADA" in p for p in pgs)
+    assert all("Candidata experimental - É necessária a revisão de um profissional" in p for p in pgs)
     assert res.status == "candidata_experimental"
 
 

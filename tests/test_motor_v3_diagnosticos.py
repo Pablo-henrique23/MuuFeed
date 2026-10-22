@@ -27,6 +27,7 @@ def test_diagnostico_solucao_e_alertas():
     assert r['status'] == 'candidata_experimental'
     d = r['solver_diagnostics']
     assert d['attempts_count'] == 3 and d['validated_candidates'] >= 1
+    assert 1 <= d['distinct_valid_candidates'] <= d['validated_candidates']
     assert not d['global_optimum_guaranteed']
     assert any('Composição concentrada' in w for w in r['descriptive_alerts'])
     assert any('Energia calculada' in w for w in r['descriptive_alerts'])
@@ -39,6 +40,7 @@ def test_diagnostico_sem_solucao_nao_confunde_com_inviabilidade():
     r = formulate_diet(request(), evaluate=evaluator,
                        catalog_names={'Forage X', 'Protein Y'})
     assert r['status'] == 'experimental_sem_dieta_validada'
+    assert r['solver_diagnostics']['distinct_valid_candidates'] == 0
     gaps = r['solver_diagnostics']['closest_candidate_gaps']
     assert gaps['me_mcal_day'] == 10
     assert gaps['mp_g_day'] == 1000
