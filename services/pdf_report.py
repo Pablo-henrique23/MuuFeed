@@ -7,6 +7,7 @@ Dados ausentes são declarados como ausentes; nada é inventado.
 from __future__ import annotations
 
 import io
+import math
 from datetime import date, datetime
 from typing import Optional, Sequence
 from xml.sax.saxutils import escape
@@ -33,6 +34,45 @@ EXPORTAVEIS = {"otimo": "Dieta formulada", "candidata_experimental": "Dieta cand
 TEXTO_EXPERIMENTAL = "CANDIDATA EXPERIMENTAL — NÃO É DIETA NUTRICIONALMENTE VALIDADA"
 SITUACAO = {"atende": "Atende", "viola": "Não atende", "nao_avaliado": "Não avaliado",
             "informativo": "Informativo"}
+
+# Rotulagem de fontes simplificada para o leitor do PDF; o programa usado para
+# computar o modelo continua identificado no README e na documentação técnica.
+def _fonte_legivel(fonte: str) -> str:
+    t = str(fonte or '').strip()
+    if t.startswith('Limite informado pelo usuário; composição NASEM'):
+        return 'NASEM 2021 + usuário'
+    if t.startswith('NASEM 2021 via nasem_dairy'):
+        return t.replace('NASEM 2021 via nasem_dairy', 'NASEM 2021', 1)
+    return t or 'Não informada'
+
+
+# Os valores vêm dos indicadores estruturados no resultado, NUNCA de nova
+# execução NASEM no gerador PDF. Isso mantém totais e regras consistentes.
+_INDICADOR_POR_REGRA = {
+    'R_ME': 'me', 'R_MP': 'mp',
+    'R_CA_ABS': 'calcio_absorvido', 'R_P_ABS': 'fosforo_absorvido',
+    'R_NA_ABS': 'sodio_absorvido', 'R_MG_ABS': 'magnesio_absorvido',
+    'R_CL_ABS': 'cloro_absorvido', 'R_K_ABS': 'potassio_absorvido',
+    'R_FDN_MIN': 'fdn', 'R_FDN_FORRAGEM_MIN': 'fdn_forragens',
+    'R_AMIDO_MAX': 'amido',
+}
+
+
+def _explicacao_regra_numerica(regra, indicadores) -> str:
+    chave = _INDICADOR_POR_REGRA.get(regra.id)
+    ind = next((i for i in indicadores if i.chave == chave), None) if chave else None
+    if ind is None or ind.ingerido is None or ind.exigido is None:
+        return regra.descricao  # sem dados não se inventa limiar
+    if not all(math.isfinite(float(v)) for v in (ind.ingerido, ind.exigido)):
+        return regra.descricao
+    sinal = '<=' if regra.id == 'R_AMIDO_MAX' else '>='
+    # Para percentuais, explicitar a unidade nos dois lados da comparação.
+    if ind.unidade == '% da MS':
+        texto_valor = f"{num(ind.ingerido, 2)}% MS {sinal} {num(ind.exigido, 2)}% MS"
+    else:
+        texto_valor = f"{num(ind.ingerido, 2)} {sinal} {num(ind.exigido, 2)} {ind.unidade}"
+    titulo = 'FDN de forragens' if chave == 'fdn_forragens' else ind.rotulo
+    return f'{titulo}: {texto_valor}'
 
 
 def _estilos() -> dict[str, ParagraphStyle]:
@@ -195,7 +235,7 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
     st_ += [_p("1. Identificação", S["h2"]), _pares(S, [
         ("Formulação", resultado.id_formulacao or "Não identificada"),
         ("Executada em", data_hora_br(resultado.executada_em) if resultado.executada_em else "Não informada"),
-        ("Relatório gerado em", data_hora_br(agora)), ("Modelo de referência", resultado.modelo_referencia or "Não informado"),
+        ("Relatório gerado em", data_hora_br(agora)), ("Modelo de referência", _fonte_legivel(resultado.modelo_referencia) if resultado.modelo_referencia else "Não informado"),
         ("Situação", EXPORTAVEIS[resultado.status])])]
 
     # 2. Lote
@@ -327,15 +367,22 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
     # 7. Regras
     st_.append(_p("7. Regras acionadas pelo motor de inferência", S["h2"]))
     if resultado.regras:
-        st_.append(_tabela(S, ["Regra", "Explicação", "Fonte"], [[r.id, r.descricao, r.fonte or "Não informada"] for r in resultado.regras], [35, 82, 57]))
+        linhas_regras = [[r.id, _explicacao_regra_numerica(r, resultado.indicadores),
+                          _fonte_legivel(r.fonte)] for r in resultado.regras]
+        st_.append(_tabela(S, ["Regra", "Explicação", "Fonte"], linhas_regras, [35, 82, 57]))
     else:
         st_.append(_p("Nenhuma regra acionada foi informada pelo formulador.", S["b"]))
 
     # 8. Fontes e limitações
     st_.append(_p("8. Fontes e limitações", S["h2"]))
-    fontes = [resultado.modelo_referencia or "Modelo de referência não informado pelo formulador.",
-              "Composição dos ingredientes: biblioteca de alimentos NASEM (NASEM_feed_library.csv, distribuída com o pacote Python nasem_dairy), sem alteração de valores."]
-    fontes += sorted({r.fonte for r in resultado.regras if r.fonte})
+    fontes = [_fonte_legivel(resultado.modelo_referencia) if resultado.modelo_referencia
+              else "Modelo de referência não informado pelo formulador.",
+              "Composição dos ingredientes: biblioteca NASEM 2021 (NASEM_feed_library.csv); teores de referência, não análises dos alimentos do lote.",
+              "Limites opcionais de FDN, amido, FDN de forragens e participação dos ingredientes: valores definidos pelo usuário, não exigências automáticas do NASEM."]
+    # Outras fontes técnicas específicas podem ser preservadas, mas nomes
+    # compostos já estão explicados acima e não são documentos independentes.
+    extras = {_fonte_legivel(r.fonte) for r in resultado.regras if r.fonte}
+    fontes += sorted(extras - {'NASEM 2021 + usuário', 'NASEM 2021', 'Usuário'})
     fontes = list(dict.fromkeys(fontes))  # sem fontes repetidas
     lim = ([TEXTO_EXPERIMENTAL.capitalize() + "."] if exp else []) + [AVISO_PROFISSIONAL, "O MuuFeed não declara esta dieta como nutricionalmente completa: só foram verificados os itens listados como atendidos ou violados.",
            "A composição dos alimentos é a de referência da biblioteca; alimentos reais variam, e recomenda-se análise bromatológica.",

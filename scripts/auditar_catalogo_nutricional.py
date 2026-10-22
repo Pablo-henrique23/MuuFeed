@@ -24,6 +24,11 @@ from services.feed_science import (
     FONTES_NNP, limite_explicito_obrigatorio, FONTE_BIBLIOTECA,
 )
 
+# Colunas descritivas da própria biblioteca (não representam grandezas numéricas).
+# Fd_Libr identifica a fonte bibliográfica do alimento; validá-la como float
+# produzia o falso positivo REVISAO_NECESSARIA para os 284 alimentos reais.
+COLUNAS_TEXTO_NASEM = frozenset({'Fd_Libr'})
+
 NUTRIENTES_MONITORADOS = (
     'Fd_NDF', 'Fd_ADF', 'Fd_Lg', 'Fd_CP', 'Fd_St', 'Fd_WSC',
     'Fd_CFat', 'Fd_Ash', 'Fd_Ca', 'Fd_P', 'Fd_Mg', 'Fd_K',
@@ -70,7 +75,7 @@ def auditar(biblioteca: pd.DataFrame) -> pd.DataFrame:
         # numérica (sem inventar o mesmo intervalo para unidades diferentes).
         outros_nao_numericos, outros_nao_finitos = [], []
         for col in colunas_nasem:
-            if col in NUTRIENTES_MONITORADOS or col == 'Fd_DM' or pd.isna(linha[col]):
+            if col in NUTRIENTES_MONITORADOS or col == 'Fd_DM' or col in COLUNAS_TEXTO_NASEM or pd.isna(linha[col]):
                 continue
             try:
                 n = float(linha[col])
@@ -147,6 +152,11 @@ def main() -> int:
           'NÃO são máximos de segurança impostos automaticamente.')
     if n != 284:
         print(f'AVISO: Esperávamos 284 itens na versão testada; a biblioteca instalada possui {n}.')
+    resumo = tabela['situacao'].value_counts()
+    print('Situação dos registros: '
+          f"{int(resumo.get('OK', 0))} OK completos nos nutrientes monitorados; "
+          f"{int(resumo.get('OK_COM_LACUNAS', 0))} OK com lacunas; "
+          f"{len(revisao)} exigindo revisão técnica.")
     if not revisao.empty:
         print(f'REVISÃO NECESSÁRIA ({len(revisao)}):')
         for linha in revisao.head(30).itertuples(index=False):

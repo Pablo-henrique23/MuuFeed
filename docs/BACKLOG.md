@@ -67,3 +67,12 @@ O status deve continuar **candidata experimental**. O projeto calcula apenas as 
 - [x] Associar fontes científicas rastreáveis e limites **indicativos, condicionais** somente para exemplos com estudos disponíveis.
 - [ ] Completar teores ausentes com resultados laboratoriais específicos ou fontes com equivalência de unidade, processamento e lote demonstrada; **não inventar zeros**.
 - [ ] Implantar análise de limites superiores de todos os nutrientes, água, micotoxinas, DCAD e peNDF antes de uso animal; não concluído para o hackathon.
+
+### V15 — Legibilidade das regras no PDF e correção da auditoria
+
+- [x] Resolver falso positivo global da auditoria: `Fd_Libr` é referência **textual**, não coluna nutricional numérica; permanece entre os 84 campos contabilizados, mas não deve ser validada por conversão para `float`.
+- [x] Preservar as 68 lacunas nutricionais reportadas e a classificação 284/284 sem editar o CSV original NASEM.
+- [x] Na seção 7 do PDF, mostrar valores efetivos e limiares em formato PT-BR para ME, MP, minerais, FDN, fNDF e amido, a partir de `ResultadoFormulacao.indicadores`; sem novos cálculos.
+- [x] Na seção 7, simplificar fontes para `NASEM 2021` e `NASEM 2021 + usuário`.
+- [x] Na seção 8, distinguir teores de referência da biblioteca de alimentos das restrições operacionais informadas pelo usuário.
+- [ ] Rodar a auditoria e a suíte completa na instalação local, gerar novo PDF e conferir a seção 7 visualmente.
