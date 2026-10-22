@@ -81,41 +81,67 @@ def pagina_lote() -> None:
     st.title("Caracterização do lote")
     st.caption("Informe os dados médios do lote. Os campos marcados como padrão são hipóteses, não medições.")
     st.button("Carregar lote de exemplo (valores ilustrativos)", on_click=_exemplo)
-    # Widgets reativos: o campo da raça genérica aparece assim que a seleção muda.
-    # Salvar o lote continua sendo uma ação explícita pelo botão abaixo.
+    # A raça precisa provocar rerun para revelar o campo específico imediatamente.
+    # Widgets dentro de st.form só atualizam após clicar em "Salvar lote".
+    # Usamos um único contêiner visual, com o topo reativo e o restante no form.
     with st.container(border=True):
-        a, b = st.columns(2)
-        nome = a.text_input("Nome ou identificação do lote", key="f_nome")
-        n = b.number_input("Número de vacas", 1, 100000, key="f_n", step=1)
-        raca = a.selectbox("Raça", ["Holandesa", "Jersey", RACA_GENERICA], key="f_raca",
-                           help="Holandesa/Jersey têm ramo específico. Outra usa o ramo 'Other' do NASEM, apenas como aproximação experimental.")
+        a_topo, b_topo = st.columns(2)
+        nome = a_topo.text_input("Nome ou identificação do lote", key="f_nome")
+        n = b_topo.number_input("Número de vacas", 1, 100000, key="f_n", step=1)
+        raca = a_topo.selectbox(
+            "Raça", ["Holandesa", "Jersey", RACA_GENERICA], key="f_raca",
+            help="Holandesa/Jersey têm ramo específico. Outra usa o ramo 'Other' do NASEM, "
+                 "apenas como aproximação experimental.",
+        )
         raca_descricao = ""
         if raca == RACA_GENERICA:
-            raca_descricao = a.text_input("Nome da outra raça (opcional)", key="f_raca_descricao", max_chars=60,
-                                          help="Para registro no relatório; não modifica a parametrização genérica do NASEM.")
-        estado = b.selectbox("Estado fisiológico", ["Lactating Cow"], format_func=ESTADOS.get, key="f_estado",
-                            help="O protótipo atual implementa somente vacas em lactação.")
-        c1, c2 = a.columns([2, 1])
-        # Limite técnico independente da unidade; Lote.validar() aplica a faixa
-        # plausível após converter anos/meses/dias ao salvar.
-        idade = c1.number_input("Idade média", min_value=0.0, max_value=12000.0,
-                                key="f_idade", step=0.01, format="%.2f")
-        un = c2.selectbox("Unidade", ["anos", "meses", "dias"], key="f_idade_un")
-        st.caption("Informe a idade na unidade selecionada; a validação converte para dias ao salvar.")
-        peso = b.number_input("Peso médio (kg)", 0.0, 1500.0, key="f_peso", step=5.0)
-        ordem = a.number_input("Ordem de lactação (1 = primeira)", 1, 15, key="f_ordem", step=1)
-        dias = b.number_input("Dias em lactação (dias)", 0, 800, key="f_dias", step=1)
-        leite = a.number_input("Produção média de leite (kg/vaca/dia)", 0.0, 120.0, key="f_leite", step=0.5)
-        gord = b.number_input("Gordura do leite (%)", 0.0, 12.0, key="f_gord", step=0.05)
-        prot = a.number_input("Proteína do leite (%)", 0.0, 8.0, key="f_prot", step=0.05)
-        with st.expander("Campos avançados (hipóteses padrão)"):
-            st.caption("Valores iniciais vêm do exemplo do pacote nasem_dairy. São hipóteses: substitua por medições.")
-            x, y = st.columns(2)
-            bcs = x.number_input("Escore de condição corporal (1 a 5)", 1.0, 5.0, key="f_bcs", step=0.25)
-            lac = y.number_input("Lactose do leite (%)", 0.0, 8.0, key="f_lac", step=0.05)
-            mad = x.number_input("Peso à maturidade (kg)", 0.0, 1500.0, key="f_maduro", step=10.0)
-            gest = y.number_input("Dias de gestação (dias)", 0, 300, key="f_gest", step=1)
-        ok = st.button("Salvar lote", type="primary", key="salvar_lote")
+            raca_descricao = a_topo.text_input(
+                "Nome da outra raça (opcional)", key="f_raca_descricao", max_chars=60,
+                help="Para registro no relatório; não modifica a parametrização genérica do NASEM.",
+            )
+        estado = b_topo.selectbox(
+            "Estado fisiológico", ["Lactating Cow"], format_func=ESTADOS.get,
+            key="f_estado", help="O protótipo atual implementa somente vacas em lactação.",
+        )
+        with st.form("form_lote", border=False):
+            a, b = st.columns(2)
+            c1, c2 = a.columns([2, 1])
+            # Dentro de st.form, mudar a unidade NÃO provoca rerun imediato.
+            # Portanto o limite do widget não pode depender de `un` neste formulário.
+            # O limite de 12000 é apenas técnico; Lote.validar() aplica a faixa
+            # plausível em dias depois de converter a unidade selecionada.
+            idade = c1.number_input("Idade média", min_value=0.0, max_value=12000.0,
+                                    key="f_idade", step=0.01, format="%.2f")
+            un = c2.selectbox("Unidade", ["anos", "meses", "dias"], key="f_idade_un")
+            st.caption("Informe a idade na unidade selecionada; a validação converte para dias ao salvar.")
+            peso = b.number_input("Peso médio (kg)", 0.0, 1500.0, key="f_peso", step=5.0)
+            ordem = a.number_input("Ordem de lactação (1 = primeira)", 1, 15, key="f_ordem", step=1)
+            dias = b.number_input("Dias em lactação (dias)", 0, 800, key="f_dias", step=1)
+            leite = a.number_input("Produção média de leite (kg/vaca/dia)", 0.0, 120.0, key="f_leite", step=0.5)
+            gord = b.number_input("Gordura do leite (%)", 0.0, 12.0, key="f_gord", step=0.05)
+            prot = a.number_input("Proteína do leite (%)", 0.0, 8.0, key="f_prot", step=0.05)
+            with st.expander("Campos avançados (hipóteses padrão)"):
+                st.caption("Valores iniciais vêm do exemplo do pacote nasem_dairy. São hipóteses: substitua por medições.")
+                x, y = st.columns(2)
+                bcs = x.number_input(
+                    "Escore de condição corporal (1 a 5)", 1.0, 5.0, key="f_bcs", step=0.25,
+                    help="Avaliação visual e por palpação das reservas corporais, geralmente em escala de 1 "
+                         "(muito magra) a 5 (muito gorda). Informe a avaliação do lote; 3 é apenas hipótese padrão.")
+                lac = y.number_input(
+                    "Lactose do leite (%)", 0.0, 8.0, key="f_lac", step=0.05,
+                    help="Percentual de lactose medido na análise do leite do lote. Ex.: 4,85 para 4,85%. "
+                         "Se não houver medição, o valor inicial é uma hipótese declarada.")
+                mad = x.number_input(
+                    "Peso à maturidade (kg)", 0.0, 1500.0, key="f_maduro", step=10.0,
+                    help="Peso vivo esperado quando a vaca atingir a maturidade corporal, em kg; "
+                         "não é o peso atual (informado no campo Peso médio). "
+                         "Se desconhecido, o valor inicial é uma hipótese a conferir.")
+                gest = y.number_input(
+                    "Dias de gestação (dias)", 0, 300, key="f_gest", step=1,
+                    help="Tempo médio desde a concepção até a data avaliada, em dias. "
+                         "Informe 0 para vacas não gestantes; não confundir com dias em lactação. "
+                         "Em lotes mistos, um único número representa apenas uma aproximação.")
+            ok = st.form_submit_button("Salvar lote", type="primary")
     if ok:
         lote = Lote(nome, int(n), raca, float(idade), un, float(peso), int(ordem), int(dias), estado,
                     float(leite), float(gord), float(prot), float(bcs), float(lac), float(mad), int(gest),
@@ -136,9 +162,14 @@ def pagina_lote() -> None:
 def pagina_sugestao_automatica() -> None:
     ss, cat = st.session_state, get_catalogo()
     st.title("Sugestão automática de ingredientes")
-    st.caption("Modo assistido: o MuuFeed propõe ingredientes candidatos para vacas em lactação. "
-               "A seleção não é uma dieta e não garante adequação nutricional. "
-               "Você confirma disponibilidade e preços antes de usar o formulador.")
+    st.caption("Modo assistido: o MuuFeed apresenta ingredientes candidatos e você confirma "
+               "disponibilidade e preços antes de formular a dieta.")
+    st.info("**Como funciona de fato:** esta primeira lista contém seis ingredientes "
+            "predefinidos para demonstração, iguais para todos os lotes em lactação. "
+            "Ela NÃO é selecionada por um algoritmo nutricional personalizado. "
+            "Os preços iniciais são ilustrativos. **O lote passa a influenciar os cálculos "
+            "nutricionais e as quantidades somente na etapa Formular dieta**, "
+            "após a confirmação dos ingredientes e preços.")
     if ss.get("lote") is None:
         st.warning("Cadastre e salve o lote primeiro.")
         if st.button("Ir ao lote", key="assistir_lote"):
@@ -342,9 +373,10 @@ def pagina_formular() -> None:
         key="form_share_max",
         help="Teto operacional informado pelo usuário: impede a concentração excessiva em um único alimento, "
              "mas não substitui limites nutricionais de inclusão fundamentados.")
-    st.caption("Sem teto, o otimizador de menor custo pode selecionar apenas os alimentos mais baratos. "
-               "Se ativar, todos os ingredientes disponíveis recebem o mesmo teto percentual da MS; "
-               "isso pode elevar o custo ou impedir uma solução.")
+    st.caption("Sem teto, a minimização de custo pode concentrar a dieta em poucos ingredientes "
+               "economicamente vantajosos que satisfaçam as restrições ativas. "
+               "Com teto, cada ingrediente recebe o mesmo máximo em % da MS. "
+               "Isso não é um limite nutricional seguro e pode elevar o custo ou impedir a solução.")
     st.markdown("**Restrições opcionais de composição (% da matéria seca)**")
     st.caption("Sem valor informado, FDN e amido são calculados apenas como indicadores informativos. "
                "Valores digitados são definidos pelo usuário, não recomendações automáticas NASEM.")
@@ -357,13 +389,18 @@ def pagina_formular() -> None:
         "Amido máximo (% da MS)", min_value=0.0, max_value=100.0, value=None,
         step=0.5, format="%.2f", key="form_amido_max",
         help="Opcional; use somente um limite tecnicamente justificado para o seu lote.")
-    st.caption("A FDN de forragens é calculada separadamente da FDN total; isso NÃO mede fibra fisicamente efetiva. "
-               "Segundo o NASEM 2021, sua interpretação depende de FDN total, amido e características físicas da dieta.")
-    limite_fdn_forragem = st.number_input(
-        "FDN proveniente de forragens — mínimo (% da MS, opcional)",
-        min_value=0.0, max_value=100.0, value=None, step=0.5, format="%.2f",
-        key="form_fdn_forragem_min",
-        help="Apenas limite explicitamente informado e tecnicamente justificado; não há mínimo automático neste protótipo.")
+    # Indicador útil em dietas de ruminantes, mas não obrigatório para a demonstração.
+    # Preservar a capacidade no motor e o indicador no PDF; retirar do formulário principal.
+    with st.expander("Avançado: FDN proveniente de forragens (opcional)"):
+        st.caption("A FDN proveniente de forragens é diferente da FDN total e NÃO equivale "
+                   "à fibra fisicamente efetiva (peNDF). Sem limite, segue informativa.")
+        limite_fdn_forragem = st.number_input(
+            "FDN proveniente de forragens — mínimo (% da MS, opcional)",
+            min_value=0.0, max_value=100.0, value=None, step=0.5, format="%.2f",
+            key="form_fdn_forragem_min",
+            help="Apenas limite explicitamente informado por responsável técnico; "
+                 "não existe mínimo automático neste protótipo. "
+                 "Usa somente FDN de ingredientes classificados como forragens.")
     exigir_ca_p = st.checkbox(
         "Exigir cálcio e fósforo ABSORVIDOS (NASEM, experimental)",
         value=False, key="form_minerais_abs",

@@ -446,7 +446,6 @@ def formulate_diet(
         "model": "NASEM 2021 via nasem_dairy",
         "evaluation_count": eval_cached.cache_info().misses,
         "warnings": [
-            "NÃO USAR para alimentar animais: modelo parcial.",
             ("Minerais absorvidos com restrição ativa: " + ", ".join(
                 [nome for ativar, nome in ((request.require_absorbed_ca_p, "Ca e P"),
                                           (request.require_absorbed_na, "Na"),

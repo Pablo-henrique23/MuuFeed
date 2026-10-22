@@ -26,6 +26,25 @@ python scripts/verificar_nasem_minerais.py
 | **Formulação personalizada** | Lote, alimentos disponíveis, preços, MS estimada e limites opcionais | Candidata local de menor custo, regras acionadas e PDF |
 | **Analisar dieta existente** | Quantidades fixas em kg de matéria natural | Avaliação da dieta existente, sem otimizar quantidades, e PDF específico |
 
+## Transparência do modo assistido (revisão da entrega)
+
+A **Sugestão automática de ingredientes** começa com **seis candidatos fixos de demonstração**
+para lotes em lactação, identificados em `services/ingredient_suggestion.py`. **Não há
+seleção personalizada conforme peso, produção ou raça nesse primeiro passo.** Os preços
+iniciais vêm da tabela ilustrativa incluída no projeto, **não de cotação real**.
+O usuário confirma disponibilidade, limites e preços. Só então o motor de formulação
+usa os dados do lote e do NASEM para escolher **quantidades** sob as restrições ativas.
+Nenhum ingrediente precisa aparecer com participação positiva na solução.
+
+A FDN **proveniente de forragens** fica em *Restrições avançadas*, mas permanece calculada
+como indicador e opcionalmente limitada quando o usuário informa um mínimo técnico.
+Ela **não equivale à fibra fisicamente efetiva**. O teto em % MS por ingrediente é
+operacional e não garante segurança nutricional ou diversidade suficiente.
+
+O estado fisiológico **Vaca seca** exige regras, entradas e estimativa de consumo
+apropriadas; ainda não foi integrado nem testado neste protótipo. O aplicativo só
+permite formulação de **vacas em lactação**, embora a biblioteca NASEM tenha outros ramos.
+
 ## Por que os nutrientes novos nem sempre mudam a dieta?
 
 Um **valor de composição** não é uma exigência nutricional. Por exemplo, saber que a dieta contém 0,26% de cálcio total não prova sua adequação: a comparação precisa levar em conta **cálcio absorvido** e a exigência calculada pelo NASEM.

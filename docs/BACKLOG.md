@@ -44,3 +44,15 @@
 ## Critérios obrigatórios de honestidade científica
 
 O status deve continuar **candidata experimental**. O projeto calcula apenas as restrições que efetivamente verificou e não pode ser utilizado como prescrição nutricional independente de médico-veterinário ou zootecnista.
+
+## Revisão após testes funcionais A–G
+
+- [x] Testes de entrada negativa G1–G6 aprovados pelo usuário.
+- [x] PDFs A–F gerados; conferidas composições, custos e diagnósticos principais.
+- [x] Transparência: candidatos do modo assistido são fixos, preços iniciais ilustrativos; lote entra na formulação.
+- [x] HELP nos quatro campos avançados do lote.
+- [x] Campo FDN proveniente de forragens recolhido a seção avançada sem perda do indicador ou regra.
+- [x] Remover frase repetida "NÃO USAR para alimentar animais: modelo parcial." do fim do PDF, mantendo alertas profissionais e experimentais.
+- [ ] Extensão para vacas secas: entradas e hipóteses específicas, ramo NASEM testado com dieta exemplo e testes nutricionais próprios (não expor sem validação).
+- [ ] Sugestão REALMENTE personalizada de ingredientes: selecionar por lote, disponibilidade, classes nutricionais e restrições cientificamente referenciadas; atualmente NÃO implementada.
+- [ ] Limites nutricionais de inclusão por ingrediente/categoria, com referência veterinária/zootécnica; teto operacional atual não substitui isso.
