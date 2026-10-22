@@ -22,6 +22,7 @@ iniciar_estado()
 ROTAS = {"Painel": pages.pagina_painel, "Lote": pages.pagina_lote,
          "Sugestão automática": pages.pagina_sugestao_automatica,
          "Ingredientes e preços": pages.pagina_ingredientes, "Formular dieta": pages.pagina_formular,
+         "Analisar dieta": pages.pagina_analisar_dieta,
          "Resultados": pages.pagina_resultados}
 
 with st.sidebar:

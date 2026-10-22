@@ -6,7 +6,7 @@ import streamlit as st
 from models import Ingrediente, Lote, RequisicaoFormulacao, validar_ingredientes
 from services.feed_catalog import CatalogoIngredientes
 
-PAGINAS = ["Painel", "Lote", "Sugestão automática", "Ingredientes e preços", "Formular dieta", "Resultados"]
+PAGINAS = ["Painel", "Lote", "Sugestão automática", "Ingredientes e preços", "Formular dieta", "Analisar dieta", "Resultados"]
 
 
 @st.cache_resource(show_spinner="Carregando a biblioteca de ingredientes NASEM…")
@@ -21,6 +21,7 @@ def iniciar_estado() -> None:
     ss.setdefault("selecionados", {})    # uid -> {preco, origem, disponivel, min_mn, max_mn}
     ss.setdefault("resultado", None)     # ResultadoFormulacao
     ss.setdefault("data_ref_precos", None)
+    ss.setdefault("analise_resultado", None)
     ss.setdefault("requisicao_resultado", None)  # requisição que originou o resultado atual
     if "_ir_para" in ss:                 # navegação programática, antes de criar o widget `nav`
         ss["nav"] = ss.pop("_ir_para")

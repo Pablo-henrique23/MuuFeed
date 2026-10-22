@@ -41,7 +41,7 @@ class Lote:
     n_vacas: int = 1
     raca: str = ""
     idade_valor: float = 0.0
-    idade_unidade: str = "anos"  # "anos" | "meses"
+    idade_unidade: str = "anos"  # "anos" | "meses" | "dias"
     peso_kg: float = 0.0
     ordem_lactacao: int = 1
     dias_lactacao: int = 0
@@ -56,7 +56,7 @@ class Lote:
 
     @property
     def idade_dias(self) -> float:
-        fator = DIAS_POR_ANO if self.idade_unidade == "anos" else DIAS_POR_MES
+        fator = {"anos": DIAS_POR_ANO, "meses": DIAS_POR_MES, "dias": 1.0}.get(self.idade_unidade, 1.0)
         return self.idade_valor * fator
 
     @property
@@ -70,8 +70,8 @@ class Lote:
             erros.append("Informe o nome ou a identificação do lote.")
         if self.estado not in ESTADOS:
             erros.append("Estado fisiológico inválido.")
-        if self.idade_unidade not in ("anos", "meses"):
-            erros.append("A unidade da idade deve ser anos ou meses.")
+        if self.idade_unidade not in ("anos", "meses", "dias"):
+            erros.append("A unidade da idade deve ser anos, meses ou dias.")
         for campo, (lo, hi, un) in LIMITES.items():
             valor = self.idade_dias if campo == "idade_dias" else getattr(self, campo)
             if not (lo <= valor <= hi):
@@ -139,6 +139,8 @@ class OpcoesFormulacao:
     consumo_ms_kg_dia: Optional[float] = None  # Entrada explícita; não é estimativa automática
     min_ndf_pct_dm: Optional[float] = None  # Limite opcional definido pelo usuário, % da MS
     max_starch_pct_dm: Optional[float] = None  # Limite opcional definido pelo usuário, % da MS
+    min_forage_ndf_pct_dm: Optional[float] = None  # FDN de forragem opcional, % da MS
+    require_absorbed_ca_p: bool = False  # opcional: duas restrições adicionais calculadas pelo NASEM
 
 
 @dataclass

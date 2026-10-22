@@ -26,6 +26,7 @@ from services.rotulos import eh_chave_tecnica, nao_avaliadas_unicas, rotulo_legi
 VERDE, VERDE_ESC = colors.HexColor("#1F6B4F"), colors.HexColor("#17503B")
 TINTA, CINZA, LINHA = colors.HexColor("#14211B"), colors.HexColor("#51625A"), colors.HexColor("#D5E0D8")
 ZEBRA, VERMELHO, AMBAR = colors.HexColor("#F1F6F2"), colors.HexColor("#B42318"), colors.HexColor("#FBF1DC")
+AVISO_PROFISSIONAL = "Esta formulação não substitui a avaliação de médico-veterinário ou zootecnista."
 EXPORTAVEIS = {"otimo": "Dieta formulada", "candidata_experimental": "Dieta candidata experimental",
                "demonstracao": "Cenário demonstrativo"}
 TEXTO_EXPERIMENTAL = "CANDIDATA EXPERIMENTAL — NÃO É DIETA NUTRICIONALMENTE VALIDADA"
@@ -182,6 +183,8 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]), Spacer(1, 4)]
     if resultado.mensagem and not demo:
         st_.append(_p(resultado.mensagem, S["b"]))
+    if not demo:
+        st_.append(_p(AVISO_PROFISSIONAL, S["peq"]))
 
     # 1. Identificação
     st_ += [_p("1. Identificação", S["h2"]), _pares(S, [
@@ -256,21 +259,21 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
     if resultado.indicadores:
         linhas = []
         for i in resultado.indicadores:
-            direcao = ("Mínimo" if i.chave == "fdn" else
+            direcao = ("Mínimo" if i.chave in ("fdn", "fdn_forragens") else
                        "Máximo" if i.chave == "amido" else "Exigência")
             limite = (f"{direcao}: {num(i.exigido, 2)}" if i.exigido is not None
-                      else "Não configurado" if i.chave in ("fdn", "amido") else "Não disponível")
+                      else "Não configurado" if i.chave in ("fdn", "fdn_forragens", "amido") else "—" if i.status == "informativo" else "Não disponível")
             razao = (num(i.ingerido / i.exigido * 100, 1, "%")
-                     if i.chave in ("me", "mp") and i.ingerido is not None
+                     if i.chave in ("me", "mp", "calcio_absorvido", "fosforo_absorvido", "magnesio_absorvido", "sodio_absorvido", "cloro_absorvido", "potassio_absorvido") and i.ingerido is not None
                      and i.exigido is not None and i.exigido > 0 else "—")
             linhas.append([i.rotulo, i.unidade,
                            num(i.ingerido, 2) if i.ingerido is not None else "Não disponível",
                            limite, razao, SITUACAO.get(i.status, i.status)])
         st_.append(_tabela(S, ["Indicador", "Unidade", "Valor", "Limite", "Valor / exigência", "Situação"],
                            linhas, [42, 20, 24, 35, 26, 27], direita=(2, 4)))
-        st_.append(_p("FDN e amido são expressos em percentual da matéria seca. Limites opcionais são "
-                       "informados pelo usuário, não são recomendações automáticas do NASEM. "
-                       "Sem limite, o valor é apenas informativo.", S["peq"]))
+        st_.append(_p("Indicadores de composição em % da matéria seca são informativos quando não há exigência validada; "
+                       "o traço (—) indica que nenhum limite foi aplicado. "
+                       "Limites opcionais são definidos pelo usuário, não são recomendações automáticas do NASEM.", S["peq"]))
     else:
         st_.append(_p("O formulador não informou indicadores nutricionais.", S["b"]))
 
@@ -314,7 +317,7 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
               "Composição dos ingredientes: biblioteca de alimentos NASEM (NASEM_feed_library.csv, distribuída com o pacote Python nasem_dairy), sem alteração de valores."]
     fontes += sorted({r.fonte for r in resultado.regras if r.fonte})
     fontes = list(dict.fromkeys(fontes))  # sem fontes repetidas
-    lim = ([TEXTO_EXPERIMENTAL.capitalize() + "."] if exp else []) + ["O MuuFeed não declara esta dieta como nutricionalmente completa: só foram verificados os itens listados como atendidos ou violados.",
+    lim = ([TEXTO_EXPERIMENTAL.capitalize() + "."] if exp else []) + [AVISO_PROFISSIONAL, "O MuuFeed não declara esta dieta como nutricionalmente completa: só foram verificados os itens listados como atendidos ou violados.",
            "A composição dos alimentos é a de referência da biblioteca; alimentos reais variam, e recomenda-se análise bromatológica.",
            "Exigências e ingestão referem-se a um animal médio do lote; variações individuais não são consideradas.",
            "Preços marcados como ilustrativos não são preços de mercado confirmados."] + list(resultado.avisos)

@@ -22,6 +22,8 @@ class NasemFormulador:
             return False, "; ".join(errors)
         if req.lote.estado != "Lactating Cow":
             return False, "O formulador experimental suporta apenas vacas em lactação."
+        if req.lote.raca.strip().lower() not in ("holandesa", "holstein", "jersey"):
+            return False, "Raça ainda não parametrizada neste protótipo. Escolha Holandesa ou Jersey para o NASEM."
         if len(req.ingredientes) < 2:
             return False, "Selecione pelo menos dois ingredientes disponíveis."
         dmi = getattr(req.opcoes, "consumo_ms_kg_dia", None)
@@ -37,7 +39,7 @@ class NasemFormulador:
         if any(i.preco_mn_brl_kg is None or i.preco_mn_brl_kg <= 0 or
                not 0 < i.ms_pct <= 100 for i in req.ingredientes):
             return False, "Todos os ingredientes devem ter preço positivo e MS válida."
-        for campo, rotulo in (("min_ndf_pct_dm", "FDN mínima"), ("max_starch_pct_dm", "Amido máximo")):
+        for campo, rotulo in (("min_ndf_pct_dm", "FDN mínima"), ("max_starch_pct_dm", "Amido máximo"), ("min_forage_ndf_pct_dm", "FDN de forragens mínima")):
             valor = getattr(req.opcoes, campo, None)
             if valor is not None:
                 try:
@@ -46,6 +48,8 @@ class NasemFormulador:
                     return False, f"{rotulo} deve ser numérico."
                 if not math.isfinite(n) or not 0 <= n <= 100:
                     return False, f"{rotulo} deve estar entre 0 e 100% da MS."
+        if type(getattr(req.opcoes, "require_absorbed_ca_p", False)) is not bool:
+            return False, "A verificação de cálcio/fósforo deve ser ativada ou desativada."
         return True, ""
 
     def formular(self, req):
@@ -81,6 +85,8 @@ class NasemFormulador:
             max_iterations=100, restarts=4,
             min_ndf_pct_dm=req.opcoes.min_ndf_pct_dm,
             max_starch_pct_dm=req.opcoes.max_starch_pct_dm,
+            min_forage_ndf_pct_dm=req.opcoes.min_forage_ndf_pct_dm,
+            require_absorbed_ca_p=getattr(req.opcoes, "require_absorbed_ca_p", False),
         ))
         warnings = list(result.get("warnings", []))
         warnings += ["Cenário NASEM utiliza parâmetros complementares do exemplo oficial; "
@@ -97,6 +103,13 @@ class NasemFormulador:
                 f"{diagnostics.get('validated_candidates', 0)} candidatas passaram na verificação. "
                 "O ótimo global não é garantido."
             )
+            if diagnostics.get("best_improvement_vs_lowest_initial_brl") is not None:
+                warnings.append(
+                    f"Comparação de custos: melhor ponto inicial R$ "
+                    f"{diagnostics['lowest_initial_cost_brl_cow_day']:.2f}; "
+                    f"melhor candidata R$ {diagnostics['best_cost_brl_cow_day']:.2f} por vaca/dia. "
+                    "Isso não prova ótimo global nem qualidade nutricional completa."
+                )
         unseen = list(result.get("constraints_not_checked", []))
         if result["status"] != "candidata_experimental":
             if diagnostics.get("diagnostic_note"):
@@ -104,7 +117,7 @@ class NasemFormulador:
             gaps = diagnostics.get("closest_candidate_gaps") or {}
             names_gap = {"total_dm_kg": "diferença MS (kg)", "me_mcal_day": "déficit ME (Mcal/dia)",
                          "mp_g_day": "déficit MP (g/dia)", "ndf_pct_dm": "déficit FDN (p.p.)",
-                         "starch_pct_dm": "excesso amido (p.p.)", "bounds_dm_kg": "violação de limite (kg MS)"}
+                         "starch_pct_dm": "excesso amido (p.p.)", "ca_abs_g_day": "déficit cálcio absorvido (g/dia)", "p_abs_g_day": "déficit fósforo absorvido (g/dia)", "forage_ndf_pct_dm": "déficit FDN de forragens (p.p.)", "bounds_dm_kg": "violação de limite (kg MS)"}
             for key, value in gaps.items():
                 if float(value) > 1e-5:
                     warnings.append(f"Melhor tentativa avaliada — {names_gap.get(key, key)}: {value:.3f}.")
@@ -132,17 +145,40 @@ class NasemFormulador:
         for key, label, amount_key, limit_key in (
             ("fdn", "Fibra em detergente neutro (FDN)", "ndf_pct_dm", "ndf_min_pct_dm"),
             ("amido", "Amido", "starch_pct_dm", "starch_max_pct_dm"),
+            ("fdn_forragens", "FDN proveniente de forragens", "forage_ndf_pct_dm", "forage_ndf_min_pct_dm"),
         ):
             value, limit = comp.get(amount_key), comp.get(limit_key)
             if value is not None and math.isfinite(float(value)):
                 # Nenhum limite: valor apenas informativo, nunca "atende".
                 status = "informativo" if limit is None else (
-                    "atende" if (float(value) >= float(limit) - 1e-6 if key == "fdn"
+                    "atende" if (float(value) >= float(limit) - 1e-6 if key in ("fdn", "fdn_forragens")
                                 else float(value) <= float(limit) + 1e-6) else "viola")
                 indicators.append(Indicador(key, label, "% da MS", float(value),
                                             None if limit is None else float(limit), status))
+        for chave, rotulo, pct_key, g_key in (
+            ("calcio", "Cálcio total", "ca_pct_dm", "ca_g_day"),
+            ("fosforo", "Fósforo total", "p_pct_dm", "p_g_day"),
+        ):
+            # Composição bruta: não presumir biodisponibilidade nem exigência.
+            valor_pct, valor_g = comp.get(pct_key), comp.get(g_key)
+            if valor_pct is not None and math.isfinite(float(valor_pct)):
+                indicators.append(Indicador(chave, rotulo, "% da MS", float(valor_pct), None, "informativo"))
+            if valor_g is not None and math.isfinite(float(valor_g)):
+                indicators.append(Indicador(chave + "_g", rotulo + " ingerido", "g/dia", float(valor_g), None, "informativo"))
+        # Balanços absorvidos calculados pelo próprio NASEM. Podem ser exibidos sem
+        # serem impostos na otimização; nesse caso uma violação é um ALERTA real.
+        for chave, bal in (comp.get("absorbed_mineral_checks") or {}).items():
+            if bal.get("status") != "nao_avaliado" and bal.get("intake") is not None:
+                indicators.append(Indicador(chave, bal["label"], "g/dia",
+                                             bal["intake"], bal["requirement"], bal["status"]))
+        # Composição adicional calculada sobre a MS, sem exigência/limite nutricional.
+        for chave, perfil in (comp.get("additional_nutrients") or {}).items():
+            valor = perfil.get("pct_dm") if isinstance(perfil, dict) else None
+            if valor is not None and math.isfinite(float(valor)):
+                indicators.append(Indicador("perfil_" + chave, perfil["label"],
+                                             "% da MS", float(valor), None, "informativo"))
         checked = list(result.get("constraints_checked", []))
-        checked_labels = {"total_ms": "MS", "me": "ME", "mp": "MP", "fdn": "FDN", "amido": "amido"}
+        checked_labels = {"total_ms": "MS", "me": "ME", "mp": "MP", "fdn": "FDN", "amido": "amido", "fdn_forragens": "FDN de forragens", "calcio_absorvido": "Ca absorvido", "fosforo_absorvido": "P absorvido"}
         verified = ", ".join(checked_labels[k] for k in checked if k in checked_labels)
         rules = [RegraAcionada(r["id"], r["explanation"], r.get("source") or
                                "NASEM 2021 via nasem_dairy") for r in result.get("activated_rules", [])]

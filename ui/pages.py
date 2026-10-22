@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from models import ESTADOS, PADROES_AVANCADOS, Lote
+from services.diet_analysis import analisar_dieta
 from services.demo_scenario import cenario_demonstrativo
 from services.financeiro import resumo_financeiro
 from services.ingredient_suggestion import sugerir_ingredientes
@@ -59,7 +60,7 @@ def pagina_painel() -> None:
 
 
 # ---------------------------------------------------------------- Lote
-CAMPOS_FORM = {"f_nome": "", "f_n": 50, "f_raca": "", "f_idade": 4.0, "f_idade_un": "anos", "f_peso": 600.0,
+CAMPOS_FORM = {"f_nome": "", "f_n": 50, "f_raca": "Holandesa", "f_idade": 4.0, "f_idade_un": "anos", "f_idade_dias": 821.0, "f_idade_meses": 27.0, "f_peso": 600.0,
                "f_ordem": 2, "f_dias": 100, "f_estado": "Lactating Cow", "f_leite": 25.0, "f_gord": 3.7,
                "f_prot": 3.2, "f_bcs": PADROES_AVANCADOS["bcs"], "f_lac": PADROES_AVANCADOS["lactose_pct"],
                "f_maduro": PADROES_AVANCADOS["peso_maduro_kg"], "f_gest": PADROES_AVANCADOS["dias_gestacao"]}
@@ -82,11 +83,18 @@ def pagina_lote() -> None:
         a, b = st.columns(2)
         nome = a.text_input("Nome ou identificação do lote", key="f_nome")
         n = b.number_input("Número de vacas", 1, 100000, key="f_n", step=1)
-        raca = a.text_input("Raça (informativa)", key="f_raca", help="Não altera as exigências por si só; entram o peso e a produção.")
+        raca = a.selectbox("Raça", ["Holandesa", "Jersey", "Outra / não parametrizada"], key="f_raca",
+                           help="Holandesa e Jersey são convertidas para An_Breed no NASEM. Outras raças requerem revisão do suporte no modelo.")
         estado = b.selectbox("Estado fisiológico", list(ESTADOS), format_func=ESTADOS.get, key="f_estado")
         c1, c2 = a.columns([2, 1])
-        idade = c1.number_input("Idade média", 0.0, 40.0, key="f_idade", step=0.25, format="%.2f")
-        un = c2.selectbox("Unidade", ["anos", "meses"], key="f_idade_un")
+        # Dentro de st.form, mudar a unidade NÃO provoca rerun imediato.
+        # Portanto o limite do widget não pode depender de `un` neste formulário.
+        # O limite de 12000 é apenas técnico; Lote.validar() aplica a faixa
+        # plausível em dias depois de converter a unidade selecionada.
+        idade = c1.number_input("Idade média", min_value=0.0, max_value=12000.0,
+                                key="f_idade", step=0.01, format="%.2f")
+        un = c2.selectbox("Unidade", ["anos", "meses", "dias"], key="f_idade_un")
+        st.caption("Informe a idade na unidade selecionada; a validação converte para dias ao salvar.")
         peso = b.number_input("Peso médio (kg)", 0.0, 1500.0, key="f_peso", step=5.0)
         ordem = a.number_input("Ordem de lactação (1 = primeira)", 1, 15, key="f_ordem", step=1)
         dias = b.number_input("Dias em lactação (dias)", 0, 800, key="f_dias", step=1)
@@ -108,7 +116,8 @@ def pagina_lote() -> None:
         for e in erros:
             st.error(e)
         if not erros:
-            ss["lote"], ss["resultado"], ss["requisicao_resultado"] = lote, None, None  # novo lote invalida o resultado
+            ss["lote"], ss["resultado"], ss["requisicao_resultado"] = lote, None, None
+            ss["analise_resultado"] = None  # novo lote invalida o resultado
             st.success(f"Lote salvo. Idade usada pelo formulador: {lote.idade_dias:,.0f} dias.".replace(",", "."))
             for w in avisos:
                 st.warning(w)
@@ -299,11 +308,27 @@ def pagina_formular() -> None:
         "Amido máximo (% da MS)", min_value=0.0, max_value=100.0, value=None,
         step=0.5, format="%.2f", key="form_amido_max",
         help="Opcional; use somente um limite tecnicamente justificado para o seu lote.")
+    st.caption("A FDN de forragens é calculada separadamente da FDN total; isso NÃO mede fibra fisicamente efetiva. "
+               "Segundo o NASEM 2021, sua interpretação depende de FDN total, amido e características físicas da dieta.")
+    limite_fdn_forragem = st.number_input(
+        "FDN proveniente de forragens — mínimo (% da MS, opcional)",
+        min_value=0.0, max_value=100.0, value=None, step=0.5, format="%.2f",
+        key="form_fdn_forragem_min",
+        help="Apenas limite explicitamente informado e tecnicamente justificado; não há mínimo automático neste protótipo.")
+    exigir_ca_p = st.checkbox(
+        "Exigir cálcio e fósforo ABSORVIDOS (NASEM, experimental)",
+        value=False, key="form_minerais_abs",
+        help="Restringe a busca usando oferta absorvida e exigência calculadas pelo próprio NASEM. "
+             "Pode não haver solução com os ingredientes disponíveis; não verifica os demais nutrientes.")
+    st.caption("Sem marcar, o MuuFeed ainda pode exibir o balanço mineral calculado pelo NASEM, "
+               "mas não altera a dieta para corrigi-lo.")
     req, erros = montar_requisicao()
     if req is not None:
         req.opcoes.consumo_ms_kg_dia = consumo_ms
         req.opcoes.min_ndf_pct_dm = limite_fdn
         req.opcoes.max_starch_pct_dm = limite_amido
+        req.opcoes.min_forage_ndf_pct_dm = limite_fdn_forragem
+        req.opcoes.require_absorbed_ca_p = exigir_ca_p
     for e in erros:
         st.error(e)
     if not formulador_conectado():
@@ -317,6 +342,134 @@ def pagina_formular() -> None:
             ss["requisicao_resultado"] = req
             status.update(label="Processamento concluído", state="complete")
         ir_para("Resultados")
+
+
+# ---------------------------------------------------------------- Análise de dieta existente
+
+def pagina_analisar_dieta() -> None:
+    ss = st.session_state
+    st.title("Analisar dieta existente")
+    st.caption("Informe a dieta que o lote já recebe, em kg de matéria natural por vaca/dia. "
+               "O sistema avalia as quantidades fixas: não altera ingredientes nem otimiza preços.")
+    lote = ss.get("lote")
+    if lote is None:
+        st.warning("Cadastre o lote antes de analisar uma dieta.")
+        if st.button("Ir ao lote", key="analise_ir_lote"):
+            ir_para("Lote")
+        return
+    cat = get_catalogo()
+    selecionados = ss.get("selecionados", {})
+    linhas = []
+    for uid, dados in selecionados.items():
+        info = cat.obter(uid)
+        linhas.append({"uid": uid, "Ingrediente": info.nome_pt,
+                       "Quantidade (kg MN/vaca/dia)": 0.0,
+                       "Preço (R$/kg MN)": dados.get("preco")})
+    if not linhas:
+        st.info("Selecione ingredientes na página 'Ingredientes e preços' e retorne para informar as quantidades.")
+        if st.button("Escolher ingredientes", key="analise_ingredientes"):
+            ir_para("Ingredientes e preços")
+        return
+    st.info("Esta análise utiliza as quantidades digitadas, não uma dieta otimizada. "
+            "Os preços continuam editáveis; valores ilustrativos não são cotações reais.")
+    frame = pd.DataFrame(linhas)
+    ed = st.data_editor(frame, hide_index=True, use_container_width=True,
+                        key="analise_dieta_editor", disabled=["uid", "Ingrediente"],
+                        column_config={"uid": None,
+                                       "Quantidade (kg MN/vaca/dia)": st.column_config.NumberColumn(min_value=0.0, format="%.3f"),
+                                       "Preço (R$/kg MN)": st.column_config.NumberColumn(min_value=0.0, format="%.2f")})
+    signature = tuple((str(r["uid"]), str(r["Quantidade (kg MN/vaca/dia)"]),
+                       str(r["Preço (R$/kg MN)"])) for _, r in ed.iterrows())
+    if st.button("ANALISAR DIETA INFORMADA", type="primary", use_container_width=True):
+        from models import Ingrediente
+        ingredientes, quantidades = [], {}
+        for _, r in ed.iterrows():
+            uid = r["uid"]
+            cat_row = cat.obter(uid)
+            preco = r["Preço (R$/kg MN)"]
+            qty = r["Quantidade (kg MN/vaca/dia)"]
+            if pd.isna(qty) or float(qty) < 0:
+                st.error(f"Quantidade inválida: {cat_row.nome_pt}")
+                return
+            if float(qty) == 0:
+                continue
+            if pd.isna(preco) or float(preco) <= 0:
+                st.error(f"Informe preço positivo: {cat_row.nome_pt}")
+                return
+            ingredientes.append(Ingrediente(uid, cat_row.nome_original, cat_row.nome_pt,
+                                            float(cat_row.ms_pct), float(preco)))
+            quantidades[uid] = float(qty)
+        if not ingredientes:
+            ss["analise_resultado"] = None
+            st.error("Informe uma quantidade maior que zero para pelo menos um ingrediente.")
+            return
+        try:
+            ss["analise_resultado"] = analisar_dieta(lote, ingredientes, quantidades)
+            ss["analise_assinatura"] = signature
+        except Exception as exc:
+            ss["analise_resultado"] = None
+            st.error(f"Não foi possível analisar a dieta: {exc}")
+            return
+    res = ss.get("analise_resultado")
+    if res is None:
+        return
+    if ss.get("analise_assinatura") != signature:
+        st.info("As quantidades ou preços foram alterados. Clique em 'ANALISAR DIETA INFORMADA' novamente para atualizar a análise.")
+        return
+    st.warning("AVALIAÇÃO PARCIAL DE DIETA INFORMADA — NÃO É VALIDAÇÃO NUTRICIONAL COMPLETA.")
+    st.caption("Esta análise não substitui a avaliação de médico-veterinário ou zootecnista.")
+    a, b, c = st.columns(3)
+    a.metric("Matéria seca (kg/vaca/dia)", f"{res['total_dm_kg']:.2f}")
+    b.metric("Custo (R$/vaca/dia)", f"{res['cost_cow_day']:.2f}")
+    c.metric("Custo do lote (R$/dia)", f"{res['cost_herd_day']:.2f}")
+    st.dataframe(pd.DataFrame([{"Ingrediente": x["name"], "kg MS": x["kg_dm"],
+                                "kg MN": x["kg_mn"], "% MS": x["pct_dm"],
+                                "Custo R$": x["cost_brl"]} for x in res["items"]]),
+                 use_container_width=True, hide_index=True)
+    st.subheader("Indicadores nutricionais")
+    indicadores = [
+        {"Indicador": "Energia metabolizável", "Ingestão": res["me_in"], "Exigência": res["me_req"], "Unidade": "Mcal/dia",
+         "Situação": "Atende" if res["me_in"] >= res["me_req"] else "Abaixo da exigência"},
+        {"Indicador": "Proteína metabolizável", "Ingestão": res["mp_in"], "Exigência": res["mp_req"], "Unidade": "g/dia",
+         "Situação": "Atende" if res["mp_in"] >= res["mp_req"] else "Abaixo da exigência"},
+    ]
+    for key, title in [("ndf_pct_dm", "FDN"), ("starch_pct_dm", "Amido"),
+                       ("forage_ndf_pct_dm", "FDN de forragens")]:
+        indicadores.append({"Indicador": title, "Ingestão": res[key], "Exigência": "—",
+                           "Unidade": "% MS", "Situação": "Informativo (sem limite verificado)"})
+    minerais = res.get("minerals") or {}
+    for sym, label in (("ca", "Cálcio total"), ("p", "Fósforo total")):
+        for key, unidade in ((f"{sym}_pct_dm", "% MS"), (f"{sym}_g_day", "g/dia")):
+            if minerais.get(key) is not None:
+                indicadores.append({"Indicador": label, "Ingestão": minerais[key],
+                                   "Exigência": "—", "Unidade": unidade,
+                                   "Situação": "Informativo (sem exigência absorvível verificada)"})
+    for perfil in (res.get("additional_nutrients") or {}).values():
+        if perfil.get("pct_dm") is not None:
+            indicadores.append({"Indicador": perfil["label"], "Ingestão": perfil["pct_dm"],
+                                "Exigência": "—", "Unidade": "% MS",
+                                "Situação": "Informativo (sem exigência validada)"})
+    # Requisitos absorvidos obtidos do mesmo modelo NASEM, se retornados.
+    for mineral in (res.get("absorbed_mineral_checks") or {}).values():
+        if mineral.get("status") != "nao_avaliado":
+            indicadores.append({"Indicador": mineral["label"], "Ingestão": mineral["intake"],
+                                "Exigência": mineral["requirement"], "Unidade": "g/dia (absorvido)",
+                                "Situação": "Atende" if mineral["status"] == "atende" else "Abaixo da exigência"})
+    st.caption("Composição bruta (Ca/P total) difere de nutrientes absorvidos; quando disponíveis, "
+               "as exigências minerais são do próprio NASEM.")
+    st.dataframe(pd.DataFrame(indicadores), hide_index=True, use_container_width=True,
+                 column_config={"Ingestão": st.column_config.NumberColumn(format="%.2f")})
+    for warning in res["alerts"]:
+        st.caption("• " + warning)
+    st.caption("A dieta analisada não foi formulada pelo motor. Os resultados não substituem avaliação profissional.")
+    from services.analysis_pdf import gerar_pdf_analise_dieta
+    try:
+        pdf_analise = gerar_pdf_analise_dieta(res, lote)
+        st.download_button("Exportar PDF desta análise", pdf_analise,
+                           file_name="MuuFeed_analise_dieta.pdf", mime="application/pdf",
+                           key="analise_pdf_export")
+    except Exception as exc:
+        st.warning(f"PDF da análise indisponível: {exc}")
 
 
 # ---------------------------------------------------------------- Resultados
@@ -374,6 +527,9 @@ def pagina_resultados() -> None:
             st.rerun()
         return
     _banner_resultado(res)
+    if res.status in ("otimo", "candidata_experimental"):
+        st.caption("Esta formulação não substitui a avaliação de médico-veterinário ou zootecnista. "
+                   "Confira os requisitos não avaliados antes de qualquer aplicação prática.")
     if not res.itens:
         for label, _ in nao_avaliadas_unicas(res):
             st.caption(f"Não avaliado: {label}")
@@ -409,7 +565,7 @@ def pagina_resultados() -> None:
         if res.indicadores:
             rows = []
             for i in res.indicadores:
-                limite = ("Mínimo" if i.chave == "fdn" else "Máximo" if i.chave == "amido"
+                limite = ("Mínimo" if i.chave in ("fdn", "fdn_forragens") else "Máximo" if i.chave == "amido"
                           else "Exigência")
                 rows.append({"Indicador": i.rotulo, "Valor": i.ingerido, "Unidade": i.unidade,
                              "Tipo de limite": limite if i.exigido is not None else "—",

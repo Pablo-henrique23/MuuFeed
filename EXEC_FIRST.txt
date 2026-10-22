@@ -1,1 +1,0 @@
-export MUUFEED_FORMULADOR=services.nasem_adapter:NasemFormulador

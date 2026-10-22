@@ -17,10 +17,12 @@ def test_lote_valido():
 def test_conversao_idade_para_dias():
     assert math.isclose(lote_ok(idade_valor=2, idade_unidade="anos").idade_dias, 730.5)
     assert math.isclose(lote_ok(idade_valor=24, idade_unidade="meses").idade_dias, 24 * 30.4375)
+    assert lote_ok(idade_valor=821, idade_unidade="dias").idade_dias == 821
 
 
 def test_idade_chega_ao_motor():
     assert lote_ok(idade_valor=3).para_animal_nasem()["An_AgeDay"] == 3 * 365.25
+    assert lote_ok(idade_valor=821, idade_unidade="dias").para_animal_nasem()["An_AgeDay"] == 821
 
 
 def test_entradas_invalidas():
@@ -59,3 +61,9 @@ def test_requisicao_serializavel_e_resultado_sem_campo_de_completude():
     d = req.to_dict()
     assert d["lote"]["nome"] == "L1" and d["ingredientes"][0]["uid"] == "U"
     assert not any("complet" in k for k in ResultadoFormulacao(status="erro").__dict__)
+
+
+def test_idade_em_dias_validacao():
+    assert lote_ok(idade_valor=821, idade_unidade="dias").validar()[0] == []
+    assert lote_ok(idade_valor=200, idade_unidade="dias").validar()[0]
+    assert lote_ok(idade_valor=2, idade_unidade="semanas").validar()[0]

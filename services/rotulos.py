@@ -16,9 +16,12 @@ ROTULOS = {
     "mp": "Proteína metabolizável (MP)",
     "limites_operacionais": "Limites mínimo/máximo informados pelo usuário",
     "fdn": "Fibra em detergente neutro (FDN)",
+    "fdn_forragens": "FDN proveniente de forragens",
     "fibra_fisicamente_efetiva": "Fibra fisicamente efetiva",
     "amido": "Amido",
     "minerais": "Minerais",
+    "calcio_absorvido": "Cálcio absorvido (NASEM)",
+    "fosforo_absorvido": "Fósforo absorvido (NASEM)",
     "vitaminas": "Vitaminas",
     "limites_nutricionais_de_inclusao": "Limites nutricionais de inclusão de ingredientes",
 }

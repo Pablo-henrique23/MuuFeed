@@ -1,9 +1,0 @@
-Sobre os erros da fonte:
-1: "Exemplo 2: 134,2 g ÷ 36,99% dá cerca de 363 g, mas o manual escreve 3,63 kg (erro de fator 10)." A embrapa está errada, então o resultado é realmente cerca de 0,363kg (que resulta nos 134,2g de proteina buscados
-2: "Exemplo 3: a interpolação usa 2,4% para 500 kg com 10 kg de leite, mas a Tab. 4 diz 2,5%. O CMS correto seria 11,7 kg, não 11,475 kg." De fato, foi usado 2,4 e nao 2,5. Era pra ser usado 2,5%
-3: "Exemplo 3: usa NDT de 81,04% para o farelo de soja, e a Tab. 2 diz 84%." De fato o documento é inconsistente, use 81,04%.
-4: "Exemplo 3: a dieta final soma 10,17 kg de MS, não os 11,475 kg de CMS calculados. Ela só equilibra NDT e PB, sem checar Ca, P ou fibra" Realmente.
-
-As quatro críticas identificam problemas reais de cálculo ou de consistência no manual. A ressalva principal é que corrigir esses números não basta para produzir uma dieta nutricionalmente adequada: seria necessário refazer o balanceamento com os valores corrigidos e conferir todas as exigências nutricionais do animal.
-
-
