@@ -49,6 +49,7 @@ class FormulationRequest:
     restarts: int = 2
     min_ndf_pct_dm: float | None = None  # limite explícito do cenário, nunca default nutricional
     max_starch_pct_dm: float | None = None
+    max_ether_extract_pct_dm: float | None = None  # teto condicional % MS; não substitui avaliação lipídica
     min_forage_ndf_pct_dm: float | None = None  # opcional, em % MS; classificação explícita
     require_absorbed_ca_p: bool = False  # restringe Ca/P na base absorvida calculada pelo NASEM
     require_absorbed_na: bool = False  # exige sódio ABSORVIDO conforme NASEM (opcional)
@@ -84,7 +85,7 @@ def validate_request(req: FormulationRequest) -> None:
         raise ValueError("max_iterations inválido")
     if type(req.restarts) is not int or not 1 <= req.restarts <= 10:
         raise ValueError("restarts deve estar entre 1 e 10")
-    for value, label in ((req.min_ndf_pct_dm, "FDN mínima"), (req.max_starch_pct_dm, "Amido máximo"), (req.min_forage_ndf_pct_dm, "FDN de forragens mínima")):
+    for value, label in ((req.min_ndf_pct_dm, "FDN mínima"), (req.max_starch_pct_dm, "Amido máximo"), (req.max_ether_extract_pct_dm, "Extrato etéreo máximo"), (req.min_forage_ndf_pct_dm, "FDN de forragens mínima")):
         if value is not None:
             _valid_real(value, label)
             if float(value) > 100:
@@ -190,7 +191,7 @@ def formulate_diet(
 
     # FDN/amido no CSV NASEM são tratados como % da MS somente após validar os
     # dados selecionados. Sem valor não se substitui por zero.
-    lib_nut = load_library() if catalog_names is None or request.min_ndf_pct_dm is not None or request.max_starch_pct_dm is not None or request.min_forage_ndf_pct_dm is not None else None
+    lib_nut = load_library() if catalog_names is None or request.min_ndf_pct_dm is not None or request.max_starch_pct_dm is not None or request.min_forage_ndf_pct_dm is not None or request.max_ether_extract_pct_dm is not None else None
     # Para avaliações reais, carregar biblioteca também quando não há limites;
     # testes com catálogo sintético e evaluator injetado não precisam dela.
     if lib_nut is None and evaluate is None:
@@ -207,7 +208,7 @@ def formulate_diet(
             lib_nut = candidate_lib
     comp = {}
     if lib_nut is not None:
-        for column in ('Fd_Name', 'Fd_NDF', 'Fd_St'):
+        for column in ('Fd_Name', 'Fd_NDF', 'Fd_St') + (('Fd_CFat',) if request.max_ether_extract_pct_dm is not None else ()):
             if column not in lib_nut.columns:
                 raise ValueError(f"Biblioteca NASEM sem coluna exigida: {column}")
         sub = lib_nut.set_index('Fd_Name')
@@ -218,13 +219,13 @@ def formulate_diet(
             if isinstance(row, pd.DataFrame):
                 raise ValueError(f"Ingrediente com linhas ambíguas na biblioteca: {feed.name}")
             comp[feed.name] = {}
-            for attr, column in (('ndf', 'Fd_NDF'), ('starch', 'Fd_St')):
-                value = pd.to_numeric(row[column], errors='coerce')
+            for attr, column in (('ndf', 'Fd_NDF'), ('starch', 'Fd_St'), ('ee', 'Fd_CFat')):
+                value = pd.to_numeric(row.get(column), errors='coerce')
                 if pd.isna(value) or not math.isfinite(float(value)) or not 0 <= float(value) <= 100:
                     comp[feed.name][attr] = None
                 else:
                     comp[feed.name][attr] = float(value)
-    for attr, limit in (('ndf', request.min_ndf_pct_dm), ('starch', request.max_starch_pct_dm)):
+    for attr, limit in (('ndf', request.min_ndf_pct_dm), ('starch', request.max_starch_pct_dm), ('ee', request.max_ether_extract_pct_dm)):
         if limit is not None and (not comp or any(comp[f.name][attr] is None for f in request.feeds)):
             raise ValueError(f"Não há dados válidos e completos para impor restrição de {attr}; não serão usados zeros artificiais")
 
@@ -352,6 +353,8 @@ def formulate_diet(
         constraints.append({"type": "ineq", "fun": lambda x: (forage_ndf_pct(x) - request.min_forage_ndf_pct_dm) / 100})
     if request.max_starch_pct_dm is not None:
         constraints.append({"type": "ineq", "fun": lambda x: (request.max_starch_pct_dm - percent_dm(x, 'starch')) / 100})
+    if request.max_ether_extract_pct_dm is not None:
+        constraints.append({"type": "ineq", "fun": lambda x: (request.max_ether_extract_pct_dm - percent_dm(x, 'ee')) / 100})
     starting = np.array([
         0.0 if f.initial_dm_kg is None else f.initial_dm_kg for f in feeds
     ], dtype=float)
@@ -425,12 +428,14 @@ def formulate_diet(
             gaps["forage_ndf_pct_dm"] = max(0.0, request.min_forage_ndf_pct_dm - forage_ndf_pct(x))
         if request.max_starch_pct_dm is not None:
             gaps["starch_pct_dm"] = max(0.0, percent_dm(x, 'starch') - request.max_starch_pct_dm)
+        if request.max_ether_extract_pct_dm is not None:
+            gaps["ee_pct_dm"] = max(0.0, percent_dm(x, 'ee') - request.max_ether_extract_pct_dm)
         bounds_gap = max(float(np.max(np.maximum(lower - x, 0))), float(np.max(np.maximum(x - upper, 0))))
         gaps["bounds_dm_kg"] = bounds_gap
         score = (gaps["total_dm_kg"] / max(total, 1.0) + gaps["me_mcal_day"] / max(m[1], 1.0)
                  + gaps["mp_g_day"] / max(m[3], 1.0) + bounds_gap / max(total, 1.0)
                  + gaps.get("ndf_pct_dm", 0) / 100 + gaps.get("starch_pct_dm", 0) / 100
-                 + gaps.get("forage_ndf_pct_dm", 0) / 100)
+                 + gaps.get("forage_ndf_pct_dm", 0) / 100 + gaps.get("ee_pct_dm", 0) / 100)
         if request.require_absorbed_ca_p:
             score += gaps["ca_abs_g_day"] / max(m[5], 1.0) + gaps["p_abs_g_day"] / max(m[7], 1.0)
         if request.require_absorbed_na:
@@ -452,10 +457,11 @@ def formulate_diet(
                     for offset in (0, 2, 4)))
                 and (request.min_forage_ndf_pct_dm is None or forage_ndf_pct(x) >= request.min_forage_ndf_pct_dm - 1e-7)
                 and (request.min_ndf_pct_dm is None or percent_dm(x, 'ndf') >= request.min_ndf_pct_dm - 1e-7)
-                and (request.max_starch_pct_dm is None or percent_dm(x, 'starch') <= request.max_starch_pct_dm + 1e-7)):
+                and (request.max_starch_pct_dm is None or percent_dm(x, 'starch') <= request.max_starch_pct_dm + 1e-7)
+                and (request.max_ether_extract_pct_dm is None or percent_dm(x, 'ee') <= request.max_ether_extract_pct_dm + 1e-7)):
             valid.append((objective(x), x.copy(), m))
-    checked_extra = (["calcio_absorvido", "fosforo_absorvido"] if request.require_absorbed_ca_p else []) + (["sodio_absorvido"] if request.require_absorbed_na else []) + (["magnesio_absorvido", "cloro_absorvido", "potassio_absorvido"] if request.require_absorbed_mg_cl_k else []) + (["fdn_forragens"] if request.min_forage_ndf_pct_dm is not None else []) + (["fdn"] if request.min_ndf_pct_dm is not None else []) + (["amido"] if request.max_starch_pct_dm is not None else [])
-    unverified = [v for v in ["fdn", "fibra_fisicamente_efetiva", "fdn_forragens", "amido", "minerais", "vitaminas", "limites_nutricionais_de_inclusao"] if v not in checked_extra]
+    checked_extra = (["calcio_absorvido", "fosforo_absorvido"] if request.require_absorbed_ca_p else []) + (["sodio_absorvido"] if request.require_absorbed_na else []) + (["magnesio_absorvido", "cloro_absorvido", "potassio_absorvido"] if request.require_absorbed_mg_cl_k else []) + (["fdn_forragens"] if request.min_forage_ndf_pct_dm is not None else []) + (["fdn"] if request.min_ndf_pct_dm is not None else []) + (["amido"] if request.max_starch_pct_dm is not None else []) + (["extrato_etereo"] if request.max_ether_extract_pct_dm is not None else [])
+    unverified = [v for v in ["fdn", "fibra_fisicamente_efetiva", "fdn_forragens", "amido", "extrato_etereo", "minerais", "vitaminas", "limites_nutricionais_de_inclusao"] if v not in checked_extra]
     # Os pontos iniciais e os ótimos podem se repetir; não confundir avaliações
     # validadas com dietas de composições realmente diferentes.
     composicoes_distintas: list[np.ndarray] = []
@@ -612,13 +618,14 @@ def formulate_diet(
         "cost_brl_herd_30_days": cost * request.herd_size * 30,
         "nutrient_composition": {
             "ndf_pct_dm": ndf_pct, "starch_pct_dm": starch_pct,
+            "ee_pct_dm": percent_dm(x, 'ee'), "ee_max_pct_dm": request.max_ether_extract_pct_dm,
             "forage_ndf_pct_dm": forage_ndf, "forage_ndf_min_pct_dm": request.min_forage_ndf_pct_dm,
             **minerais,
             "additional_nutrients": perfil_adicional,
             "absorbed_mineral_checks": absorbed,
             "forage_classification": {f.name: ("forragem" if forage_flags[f.name] else "nao_forragem") if forage_flags[f.name] is not None else "desconhecida" for f in feeds},
             "ndf_min_pct_dm": request.min_ndf_pct_dm, "starch_max_pct_dm": request.max_starch_pct_dm,
-            "source": "NASEM_feed_library.csv: Fd_NDF, Fd_St; ponderação pela MS",
+            "source": "NASEM_feed_library.csv: Fd_NDF, Fd_St, Fd_CFat; ponderação pela MS",
             "is_nutritionally_validated": False,
         },
         "nutrition": {
@@ -639,6 +646,9 @@ def formulate_diet(
         ] if request.require_absorbed_mg_cl_k else []) + [
             {"id": "R_ME", "status": "atendida", "explanation": "Energia metabolizável ingerida >= exigida no cenário avaliado"},
             {"id": "R_MP", "status": "atendida", "explanation": "Proteína metabolizável ingerida >= exigida no cenário avaliado"},
-        ] + ([{"id": "R_FDN_FORRAGEM_MIN", "status": "atendida", "explanation": f"FDN de forragens {forage_ndf:.2f}% MS >= mínimo configurado {request.min_forage_ndf_pct_dm:.2f}% MS", "source": "Limite informado pelo usuário; composição NASEM, classificação explícita"}] if request.min_forage_ndf_pct_dm is not None else []) + ([{"id": "R_FDN_MIN", "status": "atendida", "explanation": f"FDN {ndf_pct:.2f}% MS >= mínimo configurado {request.min_ndf_pct_dm:.2f}% MS", "source": "Limite informado pelo usuário; composição NASEM"}] if request.min_ndf_pct_dm is not None else []) + ([{"id": "R_AMIDO_MAX", "status": "atendida", "explanation": f"Amido {starch_pct:.2f}% MS <= máximo configurado {request.max_starch_pct_dm:.2f}% MS", "source": "Limite informado pelo usuário; composição NASEM"}] if request.max_starch_pct_dm is not None else []),
+        ] + ([{"id": "R_EXTRATO_ETEREO_MAX", "status": "atendida",
+                 "explanation": f"Extrato etéreo {percent_dm(x, 'ee'):.2f}% MS <= {request.max_ether_extract_pct_dm:.2f}% MS",
+                 "source": "Limite informado pelo usuário; composição NASEM"}]
+              if request.max_ether_extract_pct_dm is not None else []) + ([{"id": "R_FDN_FORRAGEM_MIN", "status": "atendida", "explanation": f"FDN de forragens {forage_ndf:.2f}% MS >= mínimo configurado {request.min_forage_ndf_pct_dm:.2f}% MS", "source": "Limite informado pelo usuário; composição NASEM, classificação explícita"}] if request.min_forage_ndf_pct_dm is not None else []) + ([{"id": "R_FDN_MIN", "status": "atendida", "explanation": f"FDN {ndf_pct:.2f}% MS >= mínimo configurado {request.min_ndf_pct_dm:.2f}% MS", "source": "Limite informado pelo usuário; composição NASEM"}] if request.min_ndf_pct_dm is not None else []) + ([{"id": "R_AMIDO_MAX", "status": "atendida", "explanation": f"Amido {starch_pct:.2f}% MS <= máximo configurado {request.max_starch_pct_dm:.2f}% MS", "source": "Limite informado pelo usuário; composição NASEM"}] if request.max_starch_pct_dm is not None else []),
     })
     return base

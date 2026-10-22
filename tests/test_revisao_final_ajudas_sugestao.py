@@ -39,4 +39,4 @@ def test_frase_redundante_excluida_mas_aviso_essencial_conservado():
     motor = (raiz / "formulation_engine.py").read_text()
     pdf = (raiz / "services/pdf_report.py").read_text()
     assert "NÃO USAR para alimentar animais: modelo parcial." not in motor
-    assert "Não use para alimentar animais sem revisão de um profissional." in pdf
+    assert "Esta formulação não substitui a avaliação de médico-veterinário ou zootecnista." in pdf

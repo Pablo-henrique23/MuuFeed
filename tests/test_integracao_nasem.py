@@ -54,7 +54,12 @@ def test_financas_consistentes_com_motor_real(res, req):
 def test_pdf_da_candidata_real(res, req):
     pdf = gerar_relatorio_pdf(res, req.lote, req.ingredientes, None)
     pgs = [" ".join(p.extract_text().split()) for p in PdfReader(io.BytesIO(pdf)).pages]
-    assert all("Candidata experimental - É necessária a revisão de um profissional" in p for p in pgs)
+    # v19: a faixa vermelha repetida foi removida a pedido do usuário.
+    assert pgs and "Dieta candidata experimental" in pgs[0]
+    assert "Esta formulação não substitui a avaliação" in pgs[0]
+    assert all("Candidata experimental - É necessária a revisão de um profissional" not in p for p in pgs)
+    assert "1. Identificação" in pgs[0]
+    assert "3. Dieta candidata experimental" in " ".join(pgs)
     assert res.status == "candidata_experimental"
 
 

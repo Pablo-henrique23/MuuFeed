@@ -27,5 +27,5 @@ def test_pdf_v7_compacto_alerta_e_preco_unitario():
     assert 'ATENÇÃO: exigências/limites não atendidos' in txt
     assert 'Composição adicional' in txt
     assert 'Informativo (sem veredito)' not in txt
-    assert 'Preço por kg MN é unitário' in txt
+    assert 'Preço por kg MN é unitário' not in txt
     assert 'não há exigência validada' in txt

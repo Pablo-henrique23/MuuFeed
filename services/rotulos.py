@@ -19,6 +19,7 @@ ROTULOS = {
     "fdn_forragens": "FDN proveniente de forragens",
     "fibra_fisicamente_efetiva": "Fibra fisicamente efetiva",
     "amido": "Amido",
+    "extrato_etereo": "Extrato etéreo (gordura bruta)",
     "minerais": "Minerais",
     "calcio_absorvido": "Cálcio absorvido (NASEM)",
     "fosforo_absorvido": "Fósforo absorvido (NASEM)",

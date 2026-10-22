@@ -92,10 +92,15 @@ def analisar_dieta(lote, ingredientes, quantidades_mn: dict[str, float], *,
         r["pct_dm"] = 100 * r["kg_dm"] / total_dm
     minerais = calcular_minerais(catalog.reset_index(), {r['ingredient']: r['kg_dm'] for r in rows})
     perfil_adicional = calcular_perfil(catalog.reset_index(), {r["ingredient"]: r["kg_dm"] for r in rows})
+    ee = (perfil_adicional.get("gordura_bruta") or {}).get("pct_dm")
     alerts = ([AVISO_RACA_GENERICA] if generic_breed else []) + ["Dieta informada pelo usuário: nenhuma quantidade foi otimizada.",
               "MS total derivada das quantidades; não foi estimada como ingestão espontânea.",
               "Fibra fisicamente efetiva, vitaminas e limites nutricionais de inclusão não foram verificados. "
               "Balanços minerais absorvidos (quando disponíveis) são verificações parciais."]
+    if ee is not None and float(ee) > 7.0:
+        alerts.append(f"Extrato etéreo da dieta existente: {float(ee):.2f}% da MS; "
+                      "supera a referência condicional de 7% da MS para vacas leiteiras "
+                      "(Penn State Extension). Necessária revisão do teor e tipo de gordura.")
     for mineral in balancos.values():
         if mineral["status"] == "viola":
             alerts.append(f"{mineral['label']}: ingerido {mineral['intake']:.2f} g/dia, "
@@ -109,7 +114,7 @@ def analisar_dieta(lote, ingredientes, quantidades_mn: dict[str, float], *,
     if max_row["pct_dm"] >= 70:
         alerts.append(f"Ingrediente dominante: {max_row['name']} ({max_row['pct_dm']:.1f}% da MS). Gatilho informativo de 70%, não limite nutricional.")
     if metrics["An_MEIn"] / metrics["Trg_MEuse"] >= 1.20:
-        alerts.append("Energia calculada acima de 120% da exigência: alerta descritivo, não diagnóstico de excesso prejudicial.")
+        alerts.append("Energia calculada acima de 120% da exigência. Isso é um alerta descritivo, não é um diagnóstico de excesso prejudicial.")
     return {"items": rows, "total_dm_kg": total_dm, "total_mn_kg": sum(r["kg_mn"] for r in rows),
             "cost_cow_day": cost, "cost_herd_day": cost * lote.n_vacas,
             "me_in": metrics["An_MEIn"], "me_req": metrics["Trg_MEuse"],

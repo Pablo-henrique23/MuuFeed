@@ -43,7 +43,7 @@ def test_lote_generico_nao_bloqueia_validacao_e_registra_ressalva():
     l = lote_ok(raca=RACA_GENERICA, raca_descricao='Girolando')
     errors, notices = l.validar()
     assert not errors
-    assert any('Other' in item and 'experimental' in item for item in notices)
+    assert any('parâmetros genéricos' in item for item in notices)
     assert l.para_animal_nasem()['An_Breed'] == 'Other'
     assert 'Girolando' in rotulo_raca_lote(l)
     assert 'genérico' in rotulo_raca_lote(l)
@@ -68,7 +68,7 @@ def test_formulador_envia_other_para_o_motor_sem_perder_raca_informada():
         assert allowed, reason
         r = NasemFormulador().formular(req)
     assert captured and captured[0].animal['An_Breed'] == 'Other'
-    assert any('An_Breed' in a and 'Other' in a for a in r.avisos)
+    assert any('parâmetros genéricos' in a for a in r.avisos)
 
 
 def test_pdf_formulacao_identifica_parametros_genericos():
@@ -76,7 +76,7 @@ def test_pdf_formulacao_identifica_parametros_genericos():
     pdf = gerar_relatorio_pdf(resultado_teste('candidata_experimental'),l,ingredientes_teste())
     t=txt(pdf)
     assert 'Girolando' in t and 'Other' in t
-    assert 'aproximação experimental' in t
+    assert 'Trata-se de uma aproximação' in t
 
 
 def test_pdf_analise_identifica_parametros_genericos():
@@ -84,7 +84,7 @@ def test_pdf_analise_identifica_parametros_genericos():
     pdf = gerar_pdf_analise_dieta(resultado_analise(), l)
     t=txt(pdf)
     assert 'Gir Leiteiro' in t and 'Other' in t
-    assert 'aproximação experimental' in t
+    assert 'Trata-se de uma aproximação' in t
 
 
 def test_ui_disponibiliza_generico_sem_remover_holstein_jersey():

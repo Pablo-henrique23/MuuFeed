@@ -100,3 +100,16 @@ O status deve continuar **candidata experimental**. O projeto calcula apenas as 
 - [ ] Demonstração de inviabilidade de NASEM com aviso explicativo; a pré-triagem não faz verificação completa e não deve mentir.
 - [ ] Futuro: pré-seleção com ME/MP e minerais via NASEM real em rotina de busca iterativa, com custo computacional medido e limites de execução; **não implementado nesta versão**.
 - [ ] Futuro: vitaminas A/D/E com suprimento declarado e dados de suplementos reais; microminerais e limites superiores, exigem validação.
+
+## V19 — Revisão final / gordura / PDF
+
+- [x] Restringir extrato etéreo ponderado pela MS com teto opcional (7% inicialmente, referência condicional), no LP, no SLSQP e na verificação final.
+- [x] Rejeitar dieta acima do teto ativado e recusar composição desconhecida em vez de preencher zero.
+- [x] Mostrar EE com limite efetivo na seção de indicadores e regras do relatório.
+- [x] Reduzir mensagens repetidas no PDF sem remover dados de nutrientes e requisitos não verificados.
+- [x] Atualizar aviso de raça genérica mantendo o identificador técnico `Other` em cálculos.
+- [x] Informar EE elevado na análise de dieta existente.
+- [ ] **P0:** executar suíte completa no `.venv` e testes reais com limites de gordura e seis minerais.
+- [ ] **P0:** revisão visual de PDF real da v19 e checagem de execução offline.
+- [ ] **P0:** congelar commit e empacotar arquivos de entrega antes do prazo.
+- [ ] Futuro: validação nutricional completa (vitaminas, microminerais, fibra fisicamente efetiva, perfil de ácidos graxos, limites específicos de inclusão e hipóteses NASEM).

@@ -55,9 +55,25 @@ _INDICADOR_POR_REGRA = {
     'R_NA_ABS': 'sodio_absorvido', 'R_MG_ABS': 'magnesio_absorvido',
     'R_CL_ABS': 'cloro_absorvido', 'R_K_ABS': 'potassio_absorvido',
     'R_FDN_MIN': 'fdn', 'R_FDN_FORRAGEM_MIN': 'fdn_forragens',
-    'R_AMIDO_MAX': 'amido',
+    'R_AMIDO_MAX': 'amido', 'R_EXTRATO_ETEREO_MAX': 'extrato_etereo',
 }
 
+
+
+def _ocultar_aviso_tecnico_pdf(msg: str) -> bool:
+    """Oculta no PDF somente mensagens redundantes de implementação/diagnóstico.
+
+    O resultado estruturado preserva todos os avisos para a tela e auditoria.
+    Não ocultar avisos sobre dados faltantes, déficits ou segurança nutricional.
+    """
+    prefixes = (
+        "Candidata experimental:", "Esta formulação não substitui", "O MuuFeed não declara",
+        "Consumo total de matéria seca foi fornecido", "Limites mínimo/máximo são apenas",
+        "Teto operacional informado:", "Cenário NASEM utiliza parâmetros complementares",
+        "Energia calculada em", "Diagnóstico SLSQP:", "Comparação de custos:",
+        "NaCl declarado:", "Otimização local SLSQP:",
+    )
+    return str(msg).strip().startswith(prefixes)
 
 def _explicacao_regra_numerica(regra, indicadores) -> str:
     chave = _INDICADOR_POR_REGRA.get(regra.id)
@@ -66,7 +82,7 @@ def _explicacao_regra_numerica(regra, indicadores) -> str:
         return regra.descricao  # sem dados não se inventa limiar
     if not all(math.isfinite(float(v)) for v in (ind.ingerido, ind.exigido)):
         return regra.descricao
-    sinal = '<=' if regra.id == 'R_AMIDO_MAX' else '>='
+    sinal = '<=' if regra.id in ('R_AMIDO_MAX', 'R_EXTRATO_ETEREO_MAX') else '>='
     # Para percentuais, explicitar a unidade nos dois lados da comparação.
     if ind.unidade == '% da MS':
         texto_valor = f"{num(ind.ingerido, 2)}% MS {sinal} {num(ind.exigido, 2)}% MS"
@@ -158,12 +174,6 @@ def _moldura(c, doc, res, demo, agora) -> None:
     c.setFont("Helvetica", 8)
     c.drawRightString(larg - 18 * mm, alt - 12 * mm, "Gerado em " + data_hora_br(agora))
     c.drawRightString(larg - 18 * mm, alt - 17 * mm, "Formulação: " + (res.id_formulacao or "não identificada"))
-    if res.status == "candidata_experimental":
-        c.setFillColor(VERMELHO)
-        c.rect(0, alt - 32 * mm, larg, 6 * mm, stroke=0, fill=1)
-        c.setFillColor(colors.white)
-        c.setFont("Helvetica-Bold", 8.5)
-        c.drawCentredString(larg / 2, alt - 30 * mm, TEXTO_EXPERIMENTAL)
     c.setStrokeColor(LINHA)
     c.line(18 * mm, 14 * mm, larg - 18 * mm, 14 * mm)
     c.setFillColor(CINZA)
@@ -196,7 +206,7 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
     agora = agora or datetime.now()
     S = _estilos()
     buf = io.BytesIO()
-    doc = BaseDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=(40 if resultado.status == "candidata_experimental" else 33) * mm,
+    doc = BaseDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=33 * mm,
                           bottomMargin=20 * mm, title="Relatório MuuFeed", author="MuuFeed")
     doc.addPageTemplates([PageTemplate("p", [Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="f")],
                                        onPage=lambda c, d: _moldura(c, d, resultado, demo, agora))])
@@ -210,17 +220,7 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
                       style=[("BOX", (0, 0), (-1, -1), 1, VERMELHO), ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FDECEA")),
                              ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 6),
                              ("BOTTOMPADDING", (0, 0), (-1, -1), 6)])]
-    if exp:
-        # A lista de requisitos não verificados permanece na seção 6.
-        # O destaque inicial resume o escopo sem repetir essa lista.
-        aviso = ("Resultado experimental: atende somente às restrições efetivamente verificadas. "
-                 "Não use para alimentar animais sem revisão de um profissional.")
-        st_ += [Table([[_p(TITULO_CAIXA_EXPERIMENTAL, S["demo"])], [_p(
-            aviso, S["aviso"])]], colWidths=[doc.width],
-            style=[("BOX", (0, 0), (-1, -1), 1.2, VERMELHO), ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FDECEA")),
-                   ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 5),
-                   ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]), Spacer(1, 4)]
-    if resultado.mensagem and not demo:
+    if resultado.mensagem and not demo and not resultado.mensagem.startswith("CANDIDATA EXPERIMENTAL:"):
         st_.append(_p(resultado.mensagem, S["b"]))
     if not demo:
         st_.append(_p(AVISO_PROFISSIONAL, S["peq"]))
@@ -252,8 +252,6 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
                  ("Produção de leite", num(lote.leite_kg_dia, 1, "kg/vaca/dia")), ("Gordura do leite", num(lote.gordura_pct, 2, "%")),
                  ("Proteína do leite", num(lote.proteina_pct, 2, "%"))]
         st_.append(_pares(S, pares))
-        if utiliza_raca_generica(lote.raca):
-            st_.append(_p(AVISO_RACA_GENERICA, S["aviso"]))
         padrao = lote.campos_padrao
         if padrao:
             fmt = {"bcs": lote.bcs, "lactose_pct": lote.lactose_pct, "peso_maduro_kg": lote.peso_maduro_kg,
@@ -274,7 +272,6 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
         notas.append("* Preço ilustrativo, não é preço de mercado confirmado.")
     if any(l.preco_mn_brl_kg is None or l.custo_brl is None for l in resumo.linhas):
         notas.append("Preço ou custo individual não informado para ao menos um ingrediente.")
-    notas.append("Preço por kg MN é unitário: não se somam preços. O total em R$/vaca/dia é a soma dos custos individuais.")
     st_ += [Spacer(1, 3)] + [_p(t, S["peq"]) for t in notas]
 
     # 4. Custos
@@ -307,13 +304,13 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
         principais, composicao = [], []
         for i in resultado.indicadores:
             valor = num(i.ingerido, 2) if i.ingerido is not None else "Não disponível"
-            if i.status == "informativo" and i.chave not in ("fdn", "fdn_forragens", "amido"):
+            if i.status == "informativo" and i.chave not in ("fdn", "fdn_forragens", "amido", "extrato_etereo"):
                 composicao.append([i.rotulo, valor, i.unidade])
                 continue
             direcao = ("Mínimo" if i.chave in ("fdn", "fdn_forragens") else
-                       "Máximo" if i.chave == "amido" else "Exigência")
+                       "Máximo" if i.chave in ("amido", "extrato_etereo") else "Exigência")
             limite = (f"{direcao}: {num(i.exigido, 2)}" if i.exigido is not None
-                      else "Não configurado" if i.chave in ("fdn", "fdn_forragens", "amido")
+                      else "Não configurado" if i.chave in ("fdn", "fdn_forragens", "amido", "extrato_etereo")
                       else "Não disponível")
             razao = (num(i.ingerido / i.exigido * 100, 1, "%")
                      if i.chave in ("me", "mp", "calcio_absorvido", "fosforo_absorvido", "magnesio_absorvido", "sodio_absorvido", "cloro_absorvido", "potassio_absorvido")
@@ -382,10 +379,14 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
     extras = {_fonte_legivel(r.fonte) for r in resultado.regras if r.fonte}
     fontes += sorted(extras - {'NASEM 2021; limite do usuário', 'NASEM 2021', 'Usuário'})
     fontes = list(dict.fromkeys(fontes))  # sem fontes repetidas
-    lim = (["Candidata experimental: avaliação nutricional parcial."] if exp else []) + [AVISO_PROFISSIONAL, "O MuuFeed não declara esta dieta como nutricionalmente completa: só foram verificados os itens listados como atendidos ou violados.",
-           "A composição dos alimentos é a de referência da biblioteca; alimentos reais variam, e recomenda-se análise bromatológica.",
+    # O resumo e o rodapé já mencionam a revisão profissional; não duplicar
+    # avisos técnicos no PDF destinado ao produtor. Eles permanecem em resultado.avisos.
+    avisos_pdf = [a for a in resultado.avisos if not _ocultar_aviso_tecnico_pdf(a)]
+    lim = ["A composição dos alimentos é uma referência, recomenda-se análise bromatológica.",
            "Exigências e ingestão referem-se a um animal médio do lote; variações individuais não são consideradas.",
-           "Preços marcados como ilustrativos não são preços de mercado confirmados."] + list(resultado.avisos)
+           "Preços marcados como ilustrativos não são preços de mercado confirmados."] + avisos_pdf
+    if lote is not None and utiliza_raca_generica(lote.raca) and AVISO_RACA_GENERICA not in lim:
+        lim.append(AVISO_RACA_GENERICA)
     st_ += [_p("Fontes", ParagraphStyle("f", parent=S["b"], fontName="Helvetica-Bold", spaceAfter=3))] + _lista(S, fontes)
     st_ += [Spacer(1, 6), _p("Limitações", ParagraphStyle("l", parent=S["b"], fontName="Helvetica-Bold", spaceAfter=3))] + _lista(S, lim)
     doc.build(st_)

@@ -15,9 +15,10 @@ def test_textos_do_pdf_sao_breves_e_humanos():
     codigo = (RAIZ / "services/pdf_report.py").read_text(encoding="utf-8")
     assert TEXTO_EXPERIMENTAL == "Candidata experimental - É necessária a revisão de um profissional"
     assert TITULO_CAIXA_EXPERIMENTAL == "Candidata experimental"
+    assert "c.rect(0, alt - 32 * mm" not in codigo
     assert '"Requisitos sem limites verificados: "' not in codigo
-    assert "Resultado experimental: atende somente às restrições efetivamente verificadas." in codigo
-    assert "Não use para alimentar animais sem revisão de um profissional." in codigo
+    assert "Resultado experimental: atende somente às restrições efetivamente verificadas." not in codigo
+    assert "Não use para alimentar animais sem revisão de um profissional." not in codigo
 
 
 def test_mais_pontos_iniciais_e_diagnostico_distinto():

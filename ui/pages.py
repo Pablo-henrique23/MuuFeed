@@ -216,12 +216,19 @@ def pagina_sugestao_automatica() -> None:
         value=pre.get("fndf"), step=0.5, format="%.2f", key="assistido_pre_fndf",
         help="Exemplo NASEM 2021 (TMR sob hipóteses específicas): 19% fNDF, "
              "25% FDN total, 30% amido máximo. Não é recomendação universal.")
+    ee_pre = st.number_input(
+        "Extrato etéreo máximo (% da MS; triagem condicional)",
+        min_value=0.0, max_value=100.0, value=pre.get("ee", 7.0),
+        step=0.5, format="%.2f", key="assistido_pre_ee",
+        help="Referência orientativa de 6–7% da MS em contextos específicos "
+             "(Penn State Extension). Não é um limite universal de segurança; "
+             "deixe vazio para desativar o teto e manter o indicador.")
     c5, c6, c7 = st.columns(3)
     ca_p_pre = c5.checkbox("Exigir Ca/P absorvidos", value=pre.get("ca_p", False), key="assistido_pre_ca_p")
     na_pre = c6.checkbox("Exigir Na absorvido", value=pre.get("na", False), key="assistido_pre_na")
     mg_pre = c7.checkbox("Exigir Mg/Cl/K absorvidos", value=pre.get("mg", False), key="assistido_pre_mg")
     pre = {"teto": teto_pre, "fdn": fdn_pre, "amido": amido_pre,
-           "fndf": fn_pre, "ca_p": ca_p_pre, "na": na_pre, "mg": mg_pre}
+           "ee": ee_pre, "fndf": fn_pre, "ca_p": ca_p_pre, "na": na_pre, "mg": mg_pre}
     ss["assistido_restricoes"] = pre
     st.subheader("2. Candidatos do catálogo")
     # Compatibilidade com a curadoria legada; a seleção dinâmica é a padrão.
@@ -238,6 +245,7 @@ def pagina_sugestao_automatica() -> None:
         resultado_pre = sugerir_por_restricoes(
             ss["lote"], cat, LimitesTriagem(
                 min_ndf_pct_dm=fdn_pre, max_starch_pct_dm=amido_pre,
+                max_ether_extract_pct_dm=ee_pre,
                 min_forage_ndf_pct_dm=fn_pre, max_share_ingredient_pct_dm=teto_pre,
                 require_ca_p=ca_p_pre, require_na=na_pre, require_mg_cl_k=mg_pre),
             selecionados=ss["selecionados"])
@@ -320,12 +328,11 @@ def pagina_sugestao_automatica() -> None:
         if ids_marcados:
             passou_quimica, diagnostico_quimica = conferir_selecao_quimica(
                 cat, LimitesTriagem(min_ndf_pct_dm=fdn_pre, max_starch_pct_dm=amido_pre,
+                    max_ether_extract_pct_dm=ee_pre,
                     min_forage_ndf_pct_dm=fn_pre, max_share_ingredient_pct_dm=teto_pre),
                 ids_marcados, precos=precos_checagem)
-            if passou_quimica:
-                st.success("**Triagem dos ingredientes marcados:** " + diagnostico_quimica)
-            else:
-                st.warning("**Triagem dos ingredientes marcados:** " + diagnostico_quimica)
+            if not passou_quimica:
+                st.warning(diagnostico_quimica)
         else:
             passou_quimica = False
             st.warning("Marque alimentos comuns suficientes para formar uma candidata.")
@@ -452,7 +459,8 @@ def pagina_formular() -> None:
         # Aplicar ANTES de montar os widgets; mantém o mesmo cenário de triagem.
         for chave, campo in (
             ("form_share_max", "teto"), ("form_fdn_min", "fdn"),
-            ("form_amido_max", "amido"), ("form_fdn_forragem_min", "fndf"),
+            ("form_amido_max", "amido"), ("form_ee_max", "ee"),
+            ("form_fdn_forragem_min", "fndf"),
             ("form_minerais_abs", "ca_p"), ("form_sodio_abs", "na"),
             ("form_mg_cl_k_abs", "mg"),
         ):
@@ -531,6 +539,15 @@ def pagina_formular() -> None:
         "Amido máximo (% da MS)", min_value=0.0, max_value=100.0, value=None,
         step=0.5, format="%.2f", key="form_amido_max",
         help="Opcional; use somente um limite tecnicamente justificado para o seu lote.")
+    ss.setdefault("form_ee_max", 7.0)
+    limite_ee = st.number_input(
+        "Extrato etéreo (gordura bruta) máximo (% da MS)",
+        min_value=0.0, max_value=100.0, value=None, step=0.5, format="%.2f",
+        key="form_ee_max",
+        help="Triagem condicional: referência usual de 6–7% da MS em dietas de vacas "
+             "leiteiras de maior produção (Penn State Extension); não é máximo de segurança "
+             "universal. Deixe vazio para usar apenas como indicador. Extrato etéreo "
+             "não é igual a perfil de ácidos graxos.")
     # Indicador útil em dietas de ruminantes, mas não obrigatório para a demonstração.
     # Preservar a capacidade no motor e o indicador no PDF; retirar do formulário principal.
     with st.expander("Avançado: FDN proveniente de forragens (opcional)"):
@@ -586,6 +603,7 @@ def pagina_formular() -> None:
         req.opcoes.max_share_ingredient_pct_dm = limite_participacao
         req.opcoes.min_ndf_pct_dm = limite_fdn
         req.opcoes.max_starch_pct_dm = limite_amido
+        req.opcoes.max_ether_extract_pct_dm = limite_ee
         req.opcoes.min_forage_ndf_pct_dm = limite_fdn_forragem
         req.opcoes.require_absorbed_ca_p = exigir_ca_p
         req.opcoes.require_absorbed_na = exigir_na
@@ -677,7 +695,6 @@ def pagina_analisar_dieta() -> None:
     if ss.get("analise_assinatura") != signature:
         st.info("As quantidades ou preços foram alterados. Clique em 'ANALISAR DIETA INFORMADA' novamente para atualizar a análise.")
         return
-    st.warning("AVALIAÇÃO PARCIAL DE DIETA INFORMADA — NÃO É VALIDAÇÃO NUTRICIONAL COMPLETA.")
     st.caption("Esta análise não substitui a avaliação de médico-veterinário ou zootecnista.")
     a, b, c = st.columns(3)
     a.metric("Matéria seca (kg/vaca/dia)", f"{res['total_dm_kg']:.2f}")
@@ -724,7 +741,7 @@ def pagina_analisar_dieta() -> None:
                                 "Exigência": st.column_config.NumberColumn(format="%.2f")})
     for warning in res["alerts"]:
         st.caption("• " + warning)
-    st.caption("A dieta analisada não foi formulada pelo motor. Os resultados não substituem avaliação profissional.")
+    st.caption("**A dieta analisada não foi formulada pelo motor. Os resultados não substituem avaliação profissional.**")
     from services.analysis_pdf import gerar_pdf_analise_dieta
     try:
         pdf_analise = gerar_pdf_analise_dieta(res, lote)
@@ -838,7 +855,7 @@ def pagina_resultados() -> None:
         if res.indicadores:
             principais, detalhados = [], []
             for i in res.indicadores:
-                limite = ("Mínimo" if i.chave in ("fdn", "fdn_forragens") else "Máximo" if i.chave == "amido"
+                limite = ("Mínimo" if i.chave in ("fdn", "fdn_forragens") else "Máximo" if i.chave in ("amido", "extrato_etereo")
                           else "Exigência")
                 row = {"Indicador": i.rotulo, "Valor": i.ingerido, "Unidade": i.unidade,
                        "Tipo de limite": limite if i.exigido is not None else "—",

@@ -137,3 +137,9 @@ Na página **Sugestão automática**, o modo guiado (padrão) pede **teto de par
 **Não confundir pré-triagem com formulação final.** A etapa linear não verifica exigências de energia, proteína metabolizável ou minerais absorvidos; o NASEM final pode legitimamente não encontrar candidata. Não há preços coletados automaticamente, nem inclusão automática de suplementos, nem dados bromatológicos medidos pelo programa. Referências de inclusão de literatura são orientativas e condicionais, não máximos seguros.
 
 Veja `docs/SELECAO_ORIENTADA_V18.md`; rode `python scripts/verificar_selecao_guiada_v18.py` no ambiente com `nasem_dairy` instalado antes de demonstrar a funcionalidade.
+
+### Triagem de gordura / extrato etéreo (v19)
+
+O formulador inclui um teto opcional para extrato etéreo (EE, coluna `Fd_CFat` do NASEM), aplicado na pré-triagem química e na otimização. O valor inicial de **7% da matéria seca** é uma referência condicional de alimentação de vacas leiteiras de maior produção (Penn State Extension), **não um limite universal de segurança**. O usuário pode ajustá-lo ou deixá-lo vazio, e a composição de gordura continua informativa quando desativada.
+
+O MuuFeed ainda **não certifica adequação nutricional completa**. Consulte `docs/VALIDACAO_V19.md` para limitações, dados de origem e procedimentos de teste. A aparência simplificada do PDF não altera essas limitações.

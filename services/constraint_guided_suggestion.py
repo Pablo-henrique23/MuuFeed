@@ -27,6 +27,7 @@ class LimitesTriagem:
     require_ca_p: bool = False
     require_na: bool = False
     require_mg_cl_k: bool = False
+    max_ether_extract_pct_dm: float | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,7 @@ def _candidatos(lote, catalogo, selecionados):
         nd = _numero(getattr(item, "Fd_NDF", None))
         starch = _numero(getattr(item, "Fd_St", None))
         cp = _numero(getattr(item, "Fd_CP", None))
+        fat = _numero(getattr(item, "Fd_CFat", None))
         if any(x is None for x in (ms, nd, starch, cp)):
             continue
         anterior = selecionados.get(str(reg.uid), {})
@@ -92,6 +94,7 @@ def _candidatos(lote, catalogo, selecionados):
                       "grupo": _grupo(str(categoria).casefold(), bool(forage), cp, nd),
                       "forage": bool(forage), "ndf": nd/100, "starch": starch/100,
                       "fndf": nd/100 if forage else 0., "cp": cp/100,
+                      "ee": (fat/100 if fat is not None else None),
                       "preco_ms": float(preco)/(ms/100), "preco": float(preco)})
     return saida
 
@@ -109,10 +112,13 @@ def sugerir_por_restricoes(lote, catalogo, limites: LimitesTriagem, *,
     for value, rotulo in ((limites.min_ndf_pct_dm, "FDN mínima"),
                           (limites.max_starch_pct_dm, "Amido máximo"),
                           (limites.min_forage_ndf_pct_dm, "FDN de forragens mínima"),
-                          (limites.max_share_ingredient_pct_dm, "Teto por ingrediente")):
+                          (limites.max_share_ingredient_pct_dm, "Teto por ingrediente"),
+                          (limites.max_ether_extract_pct_dm, "Extrato etéreo máximo")):
         if value is not None and _numero(value) is None:
             return ResultadoTriagem((), (f"Valor inválido: {rotulo}.",), False, 0, 0)
     pool = _candidatos(lote, catalogo, selecionados or {})
+    if limites.max_ether_extract_pct_dm is not None:
+        pool = [item for item in pool if item["ee"] is not None]
     if not pool:
         return ResultadoTriagem((), ("Não há dados suficientes de composição e preço para a pré-triagem. Use seleção manual.",), False, 0, 0)
     cap = limites.max_share_ingredient_pct_dm
@@ -128,6 +134,8 @@ def sugerir_por_restricoes(lote, catalogo, limites: LimitesTriagem, *,
         A.append([p["starch"] for p in pool]); B.append(float(limites.max_starch_pct_dm)/100)
     if limites.min_forage_ndf_pct_dm is not None:
         A.append([-p["fndf"] for p in pool]); B.append(-float(limites.min_forage_ndf_pct_dm)/100)
+    if limites.max_ether_extract_pct_dm is not None:
+        A.append([p["ee"] for p in pool]); B.append(float(limites.max_ether_extract_pct_dm)/100)
     bound = float(cap)/100 if cap is not None else 1.
     result = linprog([p["preco_ms"] for p in pool], A_ub=A or None, b_ub=B or None,
                      A_eq=[[1.0]*len(pool)], b_eq=[1.], bounds=[(0.,bound)]*len(pool),
@@ -213,6 +221,8 @@ def conferir_selecao_quimica(catalogo, limites: LimitesTriagem, selecionados_uid
     ou para ingrediente fora do conjunto de composição/precificação auditável.
     """
     pool = _candidatos(None, catalogo, precos or {})
+    if limites.max_ether_extract_pct_dm is not None:
+        pool = [item for item in pool if item["ee"] is not None]
     ids = set(selecionados_uids)
     subset = [p for p in pool if p["uid"] in ids]
     if len(subset) < len(ids):
@@ -226,7 +236,8 @@ def conferir_selecao_quimica(catalogo, limites: LimitesTriagem, selecionados_uid
     A, B = [], []
     for valor, chave, sinal in ((limites.min_ndf_pct_dm,"ndf",-1),
                                (limites.max_starch_pct_dm,"starch",1),
-                               (limites.min_forage_ndf_pct_dm,"fndf",-1)):
+                               (limites.min_forage_ndf_pct_dm,"fndf",-1),
+                               (limites.max_ether_extract_pct_dm,"ee",1)):
         if valor is None:
             continue
         A.append([sinal*p[chave] for p in subset])

@@ -13,10 +13,9 @@ BREEDS_NASEM = {
     RACA_GENERICA.casefold(): "Other",
 }
 AVISO_RACA_GENERICA = (
-    "Raça sem parametrização específica: será usado An_Breed='Other' do "
-    "nasem_dairy. Trata-se de uma aproximação experimental, não de uma "
-    "validação nutricional para a raça informada. Confira os resultados "
-    "com um médico-veterinário ou zootecnista."
+    "Raça sem parametrização específica, parâmetros genéricos serão utilizados. "
+    "Trata-se de uma aproximação, não de uma especificação para a raça informada. "
+    "Confira os resultados com um médico-veterinário ou zootecnista."
 )
 
 

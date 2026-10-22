@@ -147,6 +147,7 @@ class OpcoesFormulacao:
     consumo_ms_kg_dia: Optional[float] = None  # Entrada explícita; não é estimativa automática
     min_ndf_pct_dm: Optional[float] = None  # Limite opcional definido pelo usuário, % da MS
     max_starch_pct_dm: Optional[float] = None  # Limite opcional definido pelo usuário, % da MS
+    max_ether_extract_pct_dm: Optional[float] = None  # Triagem condicional de extrato etéreo; não é limite universal
     min_forage_ndf_pct_dm: Optional[float] = None  # FDN de forragem opcional, % da MS
     require_absorbed_ca_p: bool = False  # opcional: duas restrições adicionais calculadas pelo NASEM
     require_absorbed_na: bool = False  # opcional: exigência de sódio ABSORVIDO pelo NASEM

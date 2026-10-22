@@ -39,7 +39,7 @@ def test_pdf_otimo_valido_com_todas_as_secoes():
     assert "Silagem de milho" in t and "Holandesa" in t and "Atendidas" in t and "Violadas" in t and "Não avaliadas" in t
     assert "Regra de teste" in t and "Amido máximo" in t and "Aviso de teste" in t
     assert "Preço ilustrativo" in t and "20/10/2026" in t
-    assert "não declara esta dieta como nutricionalmente completa" in t
+    assert "Esta formulação não substitui a avaliação" in t
     assert EXP not in t                                   # só a candidata leva o aviso experimental
 
 
@@ -49,14 +49,13 @@ def test_candidata_experimental_exporta_e_nao_vira_otimo():
     assert res.status == "candidata_experimental"        # o gerador não converte o status
     pgs = paginas(pdf)
     assert pdf[:5] == b"%PDF-"
-    assert all(EXP in p for p in pgs), "o aviso deve aparecer em TODAS as páginas"
+    assert all(EXP not in p for p in pgs), "a faixa antiga deve desaparecer"
     t = " ".join(pgs)
-    assert t.count(EXP) == len(pgs)                         # faixa em cada página; caixa tem título próprio
-    assert "Candidata experimental Resultado experimental:" in pgs[0]
+    assert "Candidata experimental Resultado experimental:" not in pgs[0]
     assert "Requisitos sem limites verificados:" not in pgs[0]
     assert "Dieta candidata experimental" in t and "3. Dieta candidata experimental" in t
     assert "3. Dieta formulada" not in t
-    assert "Candidata experimental" in t and "não declara esta dieta como nutricionalmente completa" in t
+    assert "Dieta candidata experimental" in t and "não declara esta dieta como nutricionalmente completa" not in t
 
 
 def test_pdf_traz_preco_unitario_consumo_e_custos_consistentes():
@@ -159,9 +158,9 @@ def test_aviso_experimental_reflete_limites_nutricionais_ativados():
     assert "Fibra, amido, minerais, vitaminas e limites de inclusão não foram avaliados" not in t
     assert "Requisitos sem limites verificados:" not in cabecalho
     assert "Fibra fisicamente efetiva" not in cabecalho and "Minerais" not in cabecalho
-    assert "Resultado experimental: atende somente às restrições efetivamente verificadas." in cabecalho
+    assert "Resultado experimental: atende somente às restrições efetivamente verificadas." not in cabecalho
     assert "R_AMIDO_MAX" in t
-    assert all(TEXTO_EXPERIMENTAL in pagina for pagina in paginas(pdf))
+    assert all(TEXTO_EXPERIMENTAL not in pagina for pagina in paginas(pdf))
 
 def test_aviso_sem_limites_exibe_pendencias_apenas_na_secao_de_restricoes():
     res = _res_formato_do_motor()

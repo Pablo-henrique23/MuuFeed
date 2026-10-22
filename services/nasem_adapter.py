@@ -44,7 +44,7 @@ class NasemFormulador:
         if any(i.preco_mn_brl_kg is None or i.preco_mn_brl_kg <= 0 or
                not 0 < i.ms_pct <= 100 for i in req.ingredientes):
             return False, "Todos os ingredientes devem ter preço positivo e MS válida."
-        for campo, rotulo in (("min_ndf_pct_dm", "FDN mínima"), ("max_starch_pct_dm", "Amido máximo"), ("min_forage_ndf_pct_dm", "FDN de forragens mínima")):
+        for campo, rotulo in (("min_ndf_pct_dm", "FDN mínima"), ("max_starch_pct_dm", "Amido máximo"), ("max_ether_extract_pct_dm", "Extrato etéreo máximo"), ("min_forage_ndf_pct_dm", "FDN de forragens mínima")):
             valor = getattr(req.opcoes, campo, None)
             if valor is not None:
                 try:
@@ -128,6 +128,7 @@ class NasemFormulador:
             max_iterations=100, restarts=6,
             min_ndf_pct_dm=req.opcoes.min_ndf_pct_dm,
             max_starch_pct_dm=req.opcoes.max_starch_pct_dm,
+            max_ether_extract_pct_dm=req.opcoes.max_ether_extract_pct_dm,
             min_forage_ndf_pct_dm=req.opcoes.min_forage_ndf_pct_dm,
             require_absorbed_ca_p=getattr(req.opcoes, "require_absorbed_ca_p", False),
             require_absorbed_na=getattr(req.opcoes, "require_absorbed_na", False),
@@ -181,7 +182,7 @@ class NasemFormulador:
             gaps = diagnostics.get("closest_candidate_gaps") or {}
             names_gap = {"total_dm_kg": "diferença MS (kg)", "me_mcal_day": "déficit ME (Mcal/dia)",
                          "mp_g_day": "déficit MP (g/dia)", "na_abs_g_day": "déficit sódio absorvido (g/dia)", "ndf_pct_dm": "déficit FDN (p.p.)",
-                         "starch_pct_dm": "excesso amido (p.p.)", "ca_abs_g_day": "déficit cálcio absorvido (g/dia)", "p_abs_g_day": "déficit fósforo absorvido (g/dia)", "forage_ndf_pct_dm": "déficit FDN de forragens (p.p.)", "mg_abs_g_day": "déficit magnésio absorvido (g/dia)", "cl_abs_g_day": "déficit cloro absorvido (g/dia)", "k_abs_g_day": "déficit potássio absorvido (g/dia)", "bounds_dm_kg": "violação de limite (kg MS)"}
+                         "starch_pct_dm": "excesso amido (p.p.)", "ee_pct_dm": "excesso extrato etéreo (p.p.)", "ca_abs_g_day": "déficit cálcio absorvido (g/dia)", "p_abs_g_day": "déficit fósforo absorvido (g/dia)", "forage_ndf_pct_dm": "déficit FDN de forragens (p.p.)", "mg_abs_g_day": "déficit magnésio absorvido (g/dia)", "cl_abs_g_day": "déficit cloro absorvido (g/dia)", "k_abs_g_day": "déficit potássio absorvido (g/dia)", "bounds_dm_kg": "violação de limite (kg MS)"}
             for key, value in gaps.items():
                 if float(value) > 1e-5:
                     warnings.append(f"Melhor tentativa avaliada — {names_gap.get(key, key)}: {value:.3f}.")
@@ -233,6 +234,7 @@ class NasemFormulador:
             ("fdn", "Fibra em detergente neutro (FDN)", "ndf_pct_dm", "ndf_min_pct_dm"),
             ("amido", "Amido", "starch_pct_dm", "starch_max_pct_dm"),
             ("fdn_forragens", "FDN proveniente de forragens", "forage_ndf_pct_dm", "forage_ndf_min_pct_dm"),
+            ("extrato_etereo", "Extrato etéreo", "ee_pct_dm", "ee_max_pct_dm"),
         ):
             value, limit = comp.get(amount_key), comp.get(limit_key)
             if value is not None and math.isfinite(float(value)):
@@ -260,12 +262,20 @@ class NasemFormulador:
                                              bal["intake"], bal["requirement"], bal["status"]))
         # Composição adicional calculada sobre a MS, sem exigência/limite nutricional.
         for chave, perfil in (comp.get("additional_nutrients") or {}).items():
+            if chave == "gordura_bruta":
+                continue  # extrato etéreo já apresentado como indicador, com ou sem limite
             valor = perfil.get("pct_dm") if isinstance(perfil, dict) else None
             if valor is not None and math.isfinite(float(valor)):
                 indicators.append(Indicador("perfil_" + chave, perfil["label"],
                                              "% da MS", float(valor), None, "informativo"))
+        gordura = comp.get("ee_pct_dm")
+        if (req.opcoes.max_ether_extract_pct_dm is None and gordura is not None
+                and float(gordura) > 7.0):
+            warnings.append(f"Extrato etéreo: {float(gordura):.2f}% da MS; acima de referência "
+                            "orientativa de 7% em contexto específico (Penn State Extension). "
+                            "Verifique tipo de gordura e dieta com especialista.")
         checked = list(result.get("constraints_checked", []))
-        checked_labels = {"total_ms": "MS", "me": "ME", "mp": "MP", "fdn": "FDN", "amido": "amido", "fdn_forragens": "FDN de forragens", "calcio_absorvido": "Ca absorvido", "fosforo_absorvido": "P absorvido", "sodio_absorvido": "Na absorvido"}
+        checked_labels = {"total_ms": "MS", "me": "ME", "mp": "MP", "fdn": "FDN", "amido": "amido", "extrato_etereo": "extrato etéreo", "fdn_forragens": "FDN de forragens", "calcio_absorvido": "Ca absorvido", "fosforo_absorvido": "P absorvido", "sodio_absorvido": "Na absorvido"}
         verified = ", ".join(checked_labels[k] for k in checked if k in checked_labels)
         rules = [RegraAcionada(r["id"], r["explanation"], r.get("source") or
                                "NASEM 2021 via nasem_dairy") for r in result.get("activated_rules", [])]
