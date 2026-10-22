@@ -1,0 +1,41 @@
+https://www.embrapa.br/en/web/agencia-de-informacao-tecnologica/criacoes/gado_de_leite/producao/sistemas-de-producao/alimentacao/vacas-leiteiras/alimentacao
+
+Nutrient Requirements of Dairy Cattle - 8th Edition (NASEM 2021)
+
+https://pmc.ncbi.nlm.nih.gov/articles/PMC7825592 (fazer estimativa de consumo de MS, util pra tornar esse campo opcional)
+
+https://github.com/CNM-University-of-Guelph/NASEM-Model-Python/
+
+https://nasem-model-python.readthedocs.io/
+
+https://extension.psu.edu/from-feed-to-milk-understanding-rumen-function
+
+https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/934384/1/doc145vacasleiteiras1.pdf
+
+https://girodoboi.canalrural.com.br/pecuaria/vacas-leiteiras-dieta-com-60-de-concentrado-e-ruim-entenda-o-porque/
+
+https://www.infoteca.cnptia.embrapa.br/infoteca/bitstream/doc/1123902/1/cpafro-18428-doc167.pdf
+
+https://extension.psu.edu/concentrates-for-dairy-cattle
+
+www.cnmnasemdairy.com/library
+
+https://fieldreport.caes.uga.edu/publications/B862/considerations-for-using-by-product-feeds
+
+
+
+🌾 Alimentos Volumosos (Limites Altos e Seguros)
+
+Para volumosos de excelente qualidade, o limite de 60% da MS é o padrão ideal.
+• Silagem de Milho / Sorgo: Pode compor de 60% a 70% da dieta total sem problemas de toxicidade. É a fonte base de energia volumosa mais comum.
+• Pastagem de alta qualidade ou Capim Picado (como Capiaçu): Também pode representar 60% ou mais da ingestão. No entanto, se o capim for o único volumoso, o limitante será a capacidade do animal de digerir a fibra muito fibrosa, o que pode reduzir a produção de leite.
+• Cana-de-açúcar: O limite seguro é menor, por volta de 40% a 50% da MS volumosa, pois sua digestão é mais lenta e exige correção rigorosa com uréia.
+
+🌽 Alimentos Concentrados (Limites Rígidos e Perigosos se ultrapassados)
+
+Nenhum ingrediente concentrado sozinho deve chegar a 60% da dieta. O limite máximo de concentrados combinados (a ração inteira) em vacas de alta produção geralmente não passa de 50% a 60% da MS para evitar acidose ruminal. Individualmente, os limites são:
+• Milho Moído / Grão de Milho: Limite máximo de 30% a 40% da MS total da dieta. Passar disso causa deposição excessiva de amido e acidose aguda, derrubando a gordura do leite e causando claudicação (manqueira).
+• Farelo de Soja: Limite de 15% a 20% da MS total. Mais do que isso gera excesso de proteína degradável, sobrecarregando o fígado e gastando energia para eliminar a amônia na urina e no leite.
+• Caroço de Algodão: Limite estrito de 10% a 15% da MS total. Ele possui gossipol, um composto tóxico que em altas doses causa problemas cardíacos e reprodutivos nos animais, além do excesso de óleo prejudicar a digestão da fibra no rúmen.
+• Polpa Cítrica / Casca de Soja: Limite de 15% a 20% da MS como substitutos parciais do milho.
+• Coprodutos do Milho (DDG / WDG): Limite de 15% a 20% da MS devido ao alto teor de gordura e variação de proteína.
