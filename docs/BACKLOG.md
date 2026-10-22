@@ -49,10 +49,11 @@ O status deve continuar **candidata experimental**. O projeto calcula apenas as 
 
 - [x] Testes de entrada negativa G1–G6 aprovados pelo usuário.
 - [x] PDFs A–F gerados; conferidas composições, custos e diagnósticos principais.
-- [x] Transparência: candidatos do modo assistido são fixos, preços iniciais ilustrativos; lote entra na formulação.
+- [x] Transparência: seis candidatos fixos, três alternativas contextuais opcionais por produção/dias de lactação; sem seleção nutricional validada. Preços iniciais ilustrativos; lote entra no motor NASEM durante a formulação.
 - [x] HELP nos quatro campos avançados do lote.
 - [x] Campo FDN proveniente de forragens recolhido a seção avançada sem perda do indicador ou regra.
 - [x] Remover frase repetida "NÃO USAR para alimentar animais: modelo parcial." do fim do PDF, mantendo alertas profissionais e experimentais.
 - [ ] Extensão para vacas secas: entradas e hipóteses específicas, ramo NASEM testado com dieta exemplo e testes nutricionais próprios (não expor sem validação).
-- [ ] Sugestão REALMENTE personalizada de ingredientes: selecionar por lote, disponibilidade, classes nutricionais e restrições cientificamente referenciadas; atualmente NÃO implementada.
+- [x] Alternativas contextuais experimentais no modo assistido (heurística declarada; extras desmarcados).
+- [ ] Sugestão nutricionalmente personalizada e validada: considerar disponibilidade, composição, restrições técnicas e custo real; ainda NÃO implementada.
 - [ ] Limites nutricionais de inclusão por ingrediente/categoria, com referência veterinária/zootécnica; teto operacional atual não substitui isso.

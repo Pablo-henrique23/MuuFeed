@@ -28,13 +28,22 @@ python scripts/verificar_nasem_minerais.py
 
 ## Transparência do modo assistido (revisão da entrega)
 
-A **Sugestão automática de ingredientes** começa com **seis candidatos fixos de demonstração**
-para lotes em lactação, identificados em `services/ingredient_suggestion.py`. **Não há
-seleção personalizada conforme peso, produção ou raça nesse primeiro passo.** Os preços
-iniciais vêm da tabela ilustrativa incluída no projeto, **não de cotação real**.
-O usuário confirma disponibilidade, limites e preços. Só então o motor de formulação
-usa os dados do lote e do NASEM para escolher **quantidades** sob as restrições ativas.
-Nenhum ingrediente precisa aparecer com participação positiva na solução.
+A **Sugestão automática de ingredientes** começa com **seis candidatos fixos**
+para lotes em lactação, identificados em `services/ingredient_suggestion.py`. Opcionalmente,
+a tela apresenta **três alternativas contextuais**, escolhidas por critérios operacionais
+transparentes de **produção de leite e dias de lactação**. Isso é uma curadoria
+experimental, **não uma recomendação nutricional personalizada nem uma fórmula de dosagem**.
+As alternativas extras começam desmarcadas. Os preços iniciais são **ilustrativos**, não
+cotações reais. O usuário confirma disponibilidade, limites e preços. **Só então** o
+motor NASEM e SLSQP usa os dados do lote para formular as quantidades e verificar
+as restrições selecionadas. O uso das alternativas não garante que a dieta seja
+nutricionalmente completa, diversa ou economicamente ótima em sentido global.
+
+**Produção média, gordura, proteína e lactose do leite** são entradas de cenário
+(preferir dados medidos do lote; valores estimados devem ser identificados como
+hipóteses). Não são saídas garantidas pelo modelo nem metas cuja realização a dieta
+possa prometer. A opção de raça sempre envia `An_Breed` preenchido; detalhes da
+limitação externa observada em `docs/NOTAS_VALIDACAO_FINAL.md`.
 
 A FDN **proveniente de forragens** fica em *Restrições avançadas*, mas permanece calculada
 como indicador e opcionalmente limitada quando o usuário informa um mínimo técnico.

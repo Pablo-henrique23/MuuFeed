@@ -88,16 +88,11 @@ def pagina_lote() -> None:
         a_topo, b_topo = st.columns(2)
         nome = a_topo.text_input("Nome ou identificação do lote", key="f_nome")
         n = b_topo.number_input("Número de vacas", 1, 100000, key="f_n", step=1)
-        raca = a_topo.selectbox(
-            "Raça", ["Holandesa", "Jersey", RACA_GENERICA], key="f_raca",
-            help="Holandesa/Jersey têm ramo específico. Outra usa o ramo 'Other' do NASEM, "
-                 "apenas como aproximação experimental.",
-        )
+        raca = a_topo.selectbox("Raça", ["Holandesa", "Jersey", RACA_GENERICA], key="f_raca")
         raca_descricao = ""
         if raca == RACA_GENERICA:
             raca_descricao = a_topo.text_input(
                 "Nome da outra raça (opcional)", key="f_raca_descricao", max_chars=60,
-                help="Para registro no relatório; não modifica a parametrização genérica do NASEM.",
             )
         estado = b_topo.selectbox(
             "Estado fisiológico", ["Lactating Cow"], format_func=ESTADOS.get,
@@ -117,9 +112,20 @@ def pagina_lote() -> None:
             peso = b.number_input("Peso médio (kg)", 0.0, 1500.0, key="f_peso", step=5.0)
             ordem = a.number_input("Ordem de lactação (1 = primeira)", 1, 15, key="f_ordem", step=1)
             dias = b.number_input("Dias em lactação (dias)", 0, 800, key="f_dias", step=1)
-            leite = a.number_input("Produção média de leite (kg/vaca/dia)", 0.0, 120.0, key="f_leite", step=0.5)
-            gord = b.number_input("Gordura do leite (%)", 0.0, 12.0, key="f_gord", step=0.05)
-            prot = a.number_input("Proteína do leite (%)", 0.0, 8.0, key="f_prot", step=0.05)
+            st.caption("Produção e composição do leite são dados médios medidos ou estimados do cenário "
+                       "avaliado, não metas nutricionais garantidas pela formulação.")
+            leite = a.number_input(
+                "Produção média de leite (kg/vaca/dia)", 0.0, 120.0, key="f_leite", step=0.5,
+                help="Produção diária média observada no lote, por vaca. Se não medida, informe uma "
+                     "estimativa e documente a hipótese. Não é uma promessa de produção futura.")
+            gord = b.number_input(
+                "Gordura do leite (%)", 0.0, 12.0, key="f_gord", step=0.05,
+                help="Percentual médio de gordura da análise do leite. Use o valor observado ou "
+                     "uma hipótese identificada, não uma meta que a dieta promete alcançar.")
+            prot = a.number_input(
+                "Proteína do leite (%)", 0.0, 8.0, key="f_prot", step=0.05,
+                help="Teor médio de proteína do leite, preferencialmente medido em análise. "
+                     "É uma ENTRADA para calcular exigências, não um resultado garantido pela dieta.")
             with st.expander("Campos avançados (hipóteses padrão)"):
                 st.caption("Valores iniciais vêm do exemplo do pacote nasem_dairy. São hipóteses: substitua por medições.")
                 x, y = st.columns(2)
@@ -164,24 +170,29 @@ def pagina_sugestao_automatica() -> None:
     st.title("Sugestão automática de ingredientes")
     st.caption("Modo assistido: o MuuFeed apresenta ingredientes candidatos e você confirma "
                "disponibilidade e preços antes de formular a dieta.")
-    st.info("**Como funciona de fato:** esta primeira lista contém seis ingredientes "
-            "predefinidos para demonstração, iguais para todos os lotes em lactação. "
-            "Ela NÃO é selecionada por um algoritmo nutricional personalizado. "
-            "Os preços iniciais são ilustrativos. **O lote passa a influenciar os cálculos "
-            "nutricionais e as quantidades somente na etapa Formular dieta**, "
-            "após a confirmação dos ingredientes e preços.")
+    st.info("**Como funciona:** seis ingredientes iniciais são recomendados. "
+            "Opcionalmente o lote acrescenta alternativas por critérios explícitos de "
+            "produção e dias de lactação."
+            "Os preços são ilustrativos.")
     if ss.get("lote") is None:
         st.warning("Cadastre e salve o lote primeiro.")
         if st.button("Ir ao lote", key="assistir_lote"):
             ir_para("Lote")
         return
+    ampliar_pelo_lote = st.checkbox(
+        "Mostrar alternativas adicionais escolhidas por regras do lote (experimental)",
+        value=True, key="assistido_contextual",
+        help="Acrescenta três alternativas para comparação com base em produção de leite "
+             "e dias de lactação. Não estima segurança nutricional nem disponibilidade. "
+             "Essas alternativas começam desmarcadas e precisam de confirmação.")
     incluir_fonte_sodio = st.checkbox(
         "Incluir sal (cloreto de sódio) como ingrediente candidato opcional",
         value=False, key="assistido_sodio",
         help="O ingrediente consta na biblioteca NASEM; seu uso exige confirmar disponibilidade, "
              "preço e um máximo operacional definido por responsável técnico. "
              "Não é uma prescrição ou quantidade recomendada.")
-    sugestoes, avisos = sugerir_ingredientes(ss["lote"], cat, incluir_fonte_sodio=incluir_fonte_sodio)
+    sugestoes, avisos = sugerir_ingredientes(ss["lote"], cat, incluir_fonte_sodio=incluir_fonte_sodio,
+                                              ampliar_pelo_lote=ampliar_pelo_lote)
     if incluir_fonte_sodio:
         st.warning("Suplementos minerais exigem atenção: após confirmar, informe o máximo "
                    "(kg MN/vaca/dia) do sal em 'Ingredientes e preços' com orientação profissional. "
@@ -195,12 +206,12 @@ def pagina_sugestao_automatica() -> None:
     linhas = []
     for sug in sugestoes:
         atual = ss["selecionados"].get(sug.uid, {})
-        linhas.append({"uid": sug.uid, "Incluir": bool(atual.get("disponivel", sug.grupo != "Mineral")),
+        linhas.append({"uid": sug.uid, "Incluir": bool(atual.get("disponivel", sug.grupo != "Mineral" and not sug.opcional)),
                        "Ingrediente": sug.nome_pt, "Grupo": sug.grupo,
                        "Justificativa da sugestão": sug.motivo,
                        "Preço (R$/kg MN)": atual.get("preco", sug.preco_ilustrativo)})
     editado = st.data_editor(
-        pd.DataFrame(linhas), hide_index=True, use_container_width=True, key=f"sugestao_editor_{int(incluir_fonte_sodio)}",
+        pd.DataFrame(linhas), hide_index=True, use_container_width=True, key=f"sugestao_editor_{int(incluir_fonte_sodio)}_{int(ampliar_pelo_lote)}",
         disabled=["uid", "Ingrediente", "Grupo", "Justificativa da sugestão"],
         column_config={"uid": None, "Incluir": st.column_config.CheckboxColumn("Disponível e incluir"),
                        "Preço (R$/kg MN)": st.column_config.NumberColumn(min_value=0.0, format="%.2f")})
@@ -400,6 +411,9 @@ def pagina_formular() -> None:
             key="form_fdn_forragem_min",
             help="Apenas limite explicitamente informado por responsável técnico; "
                  "não existe mínimo automático neste protótipo. "
+                 "Referência NASEM 2021, tabela 5-1: 19% fNDF, 25% FDN total e "
+                 "30% amido máximo sob hipóteses específicas (TMR, partículas adequadas, "
+                 "milho seco moído predominante). Não é prescrição universal. "
                  "Usa somente FDN de ingredientes classificados como forragens.")
     exigir_ca_p = st.checkbox(
         "Exigir cálcio e fósforo ABSORVIDOS (NASEM, experimental)",

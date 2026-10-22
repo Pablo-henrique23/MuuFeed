@@ -16,6 +16,7 @@ class Sugestao:
     grupo: str
     motivo: str
     preco_ilustrativo: float | None
+    opcional: bool = False  # alternativas contextuais começam desmarcadas
 
 
 # Os nomes são entradas existentes no catálogo NASEM e na tabela de preços de DEMONSTRAÇÃO.
@@ -30,7 +31,34 @@ CANDIDATOS_LACTACAO = (
 )
 
 
-def sugerir_ingredientes(lote, catalogo, *, incluir_fonte_sodio: bool = False) -> tuple[list[Sugestao], list[str]]:
+# Curadoria contextual auditável: não é cálculo de exigências nem recomendação
+# nutricional. Inclui apenas alternativas para o produtor analisar disponibilidade.
+# Os valores que selecionam cada ramo são critérios de organização da interface,
+# não limiares científicos ou limites de alimentação.
+def _alternativas_do_lote(lote) -> tuple[tuple[str, str, str], ...]:
+    leite = float(getattr(lote, "leite_kg_dia", 25.0))
+    dias = int(getattr(lote, "dias_lactacao", 120))
+    if leite >= 30 or dias <= 90:
+        return (
+            ("Sorghum grain, dry, ground", "Energético", "Alternativa energética em cenário de maior produção/início de lactação; confirmar viabilidade."),
+            ("DDGS, high protein", "Proteico", "Alternativa proteica para comparação; revisar a composição e possíveis limites de uso."),
+            ("Soybean hulls", "Fibroso", "Subproduto fibroso para ampliar o conjunto; não substitui fibra fisicamente efetiva."),
+        )
+    if leite < 20 or dias >= 200:
+        return (
+            ("Alfalfa meal", "Fibroso", "Alternativa de alimento fibroso para avaliação; classificação não implica fibra efetiva."),
+            ("Wheat bran", "Subproduto", "Subproduto disponível no catálogo para comparação de preço e nutrientes."),
+            ("Sunflower meal", "Proteico", "Alternativa proteica para comparação; confirmar disponibilidade e preço."),
+        )
+    return (
+        ("Soybean hulls", "Fibroso", "Subproduto fibroso para avaliar alternativas; não substitui volumoso fisicamente efetivo."),
+        ("Wheat bran", "Subproduto", "Alternativa para comparação econômica e de composição no perfil informado."),
+        ("Cottonseed meal", "Proteico", "Fonte proteica alternativa para comparação; verificar limites apropriados com responsável técnico."),
+    )
+
+
+def sugerir_ingredientes(lote, catalogo, *, incluir_fonte_sodio: bool = False,
+                        ampliar_pelo_lote: bool = False) -> tuple[list[Sugestao], list[str]]:
     """Seleciona apenas nomes exatos presentes na biblioteca; sem preços inventados.
 
     Retorna (sugestões, avisos). Não altera estado, catálogo ou requisição.
@@ -44,6 +72,8 @@ def sugerir_ingredientes(lote, catalogo, *, incluir_fonte_sodio: bool = False) -
     por_nome = {str(r.nome_original): r for r in catalogo.tabela.itertuples(index=False)}
     saida, avisos = [], []
     candidatos = CANDIDATOS_LACTACAO
+    if ampliar_pelo_lote:
+        candidatos += _alternativas_do_lote(lote)
     if incluir_fonte_sodio:
         candidatos += (("Sodium chloride (salt)", "Mineral",
                         "Fonte de sódio e cloro; exige preço real e máximo de inclusão definido por responsável técnico."),)
@@ -56,7 +86,12 @@ def sugerir_ingredientes(lote, catalogo, *, incluir_fonte_sodio: bool = False) -
             avisos.append(f"Matéria seca inválida de '{nome}'; ignorado.")
             continue
         preco = catalogo.precos_ilustrativos.get(alimento.uid)
-        saida.append(Sugestao(alimento.uid, nome, alimento.nome_pt, grupo, motivo, preco))
+        saida.append(Sugestao(alimento.uid, nome, alimento.nome_pt, grupo, motivo, preco,
+                             opcional=nome not in {n for n, _, _ in CANDIDATOS_LACTACAO}))
+    if ampliar_pelo_lote:
+        avisos.append("Alternativas escolhidas por regras simples sobre leite e dias de lactação; "
+                      "isso não comprova adequação nutricional nem preço atual. "
+                      "Só a formulação posterior avalia os nutrientes do conjunto confirmado.")
     if not saida:
         avisos.append("Nenhum ingrediente candidato válido encontrado. Utilize o modo manual.")
     return saida, avisos

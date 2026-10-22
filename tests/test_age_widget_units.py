@@ -26,7 +26,8 @@ def test_idade_e_unidade_no_mesmo_cadastro():
                and n.args[0].value == "Unidade" for n in calls)
     assert any(n.func.attr == "number_input" and n.args and isinstance(n.args[0], ast.Constant)
                and n.args[0].value == "Idade média" for n in calls)
-    assert any(n.func.attr == "button" and n.args and isinstance(n.args[0], ast.Constant)
+    assert any(n.func.attr in ("button", "form_submit_button") and n.args
+               and isinstance(n.args[0], ast.Constant)
                and n.args[0].value == "Salvar lote" for n in calls)
 
 
