@@ -141,6 +141,10 @@ class OpcoesFormulacao:
     max_starch_pct_dm: Optional[float] = None  # Limite opcional definido pelo usuário, % da MS
     min_forage_ndf_pct_dm: Optional[float] = None  # FDN de forragem opcional, % da MS
     require_absorbed_ca_p: bool = False  # opcional: duas restrições adicionais calculadas pelo NASEM
+    consumo_ms_origem: str = "informado"  # "informado" ou "estimado_nrc2001"; documentar hipótese
+    max_share_ingredient_pct_dm: Optional[float] = None  # teto operacional do usuário, NÃO limite nutricional
+    consumo_ms_origem: str = "informado"  # "informado" ou "estimado_nrc2001"; documentar hipótese
+    max_share_ingredient_pct_dm: Optional[float] = None  # teto operacional do usuário, NÃO limite nutricional
 
 
 @dataclass

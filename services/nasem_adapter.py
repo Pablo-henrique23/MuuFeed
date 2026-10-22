@@ -1,7 +1,7 @@
 """Adaptador entre os contratos Streamlit do MuuFeed e o motor experimental.
 
 Ativação: MUUFEED_FORMULADOR=services.nasem_adapter:NasemFormulador
-Requer `req.opcoes.consumo_ms_kg_dia` informado pelo usuário, em kg MS/vaca/dia.
+Recebe `req.opcoes.consumo_ms_kg_dia` informado ou estimado explicitamente na interface, em kg MS/vaca/dia.
 FDN e amido podem ser limitados pelo usuário, mas a candidata permanece experimental.
 """
 from __future__ import annotations
@@ -28,8 +28,8 @@ class NasemFormulador:
             return False, "Selecione pelo menos dois ingredientes disponíveis."
         dmi = getattr(req.opcoes, "consumo_ms_kg_dia", None)
         if dmi is None:
-            return False, ("Informe o consumo diário estimado de matéria seca "
-                           "(kg MS/vaca/dia). Este motor ainda não estima automaticamente o consumo.")
+            return False, ("Informe o consumo de MS ou escolha a opção de estimativa NRC (2001) "
+                           "na página Formular dieta.")
         try:
             value = float(dmi)
         except (TypeError, ValueError):
@@ -50,6 +50,20 @@ class NasemFormulador:
                     return False, f"{rotulo} deve estar entre 0 e 100% da MS."
         if type(getattr(req.opcoes, "require_absorbed_ca_p", False)) is not bool:
             return False, "A verificação de cálcio/fósforo deve ser ativada ou desativada."
+        origem = getattr(req.opcoes, "consumo_ms_origem", "informado")
+        if origem not in ("informado", "estimado_nrc2001"):
+            return False, "Origem do consumo MS inválida."
+        teto = getattr(req.opcoes, "max_share_ingredient_pct_dm", None)
+        if teto is not None:
+            try:
+                teto = float(teto)
+            except (TypeError, ValueError):
+                return False, "O teto de participação deve ser numérico."
+            if not math.isfinite(teto) or not 0 < teto <= 100:
+                return False, "O teto operacional de participação deve estar entre 0 e 100% da MS."
+            if teto * len(req.ingredientes) < 100 - 1e-6:
+                return False, ("O teto informado não permite distribuir 100% da MS entre os "
+                               "ingredientes disponíveis. Aumente o teto ou adicione alimentos.")
         return True, ""
 
     def formular(self, req):
@@ -71,8 +85,12 @@ class NasemFormulador:
         animal["Trg_Dt_DMIn"] = total_dm
         equations["DMIn_eqn"] = 0
         choices = []
+        teto = getattr(req.opcoes, "max_share_ingredient_pct_dm", None)
         for i in req.ingredientes:
             low, high = i.limites_ms()
+            if teto is not None:
+                limite_ms = total_dm * float(teto) / 100.0
+                high = limite_ms if high is None else min(high, limite_ms)
             choices.append(FeedChoice(
                 name=i.nome_original, price_as_fed_brl_kg=float(i.preco_mn_brl_kg),
                 dry_matter_pct=float(i.ms_pct),
@@ -89,6 +107,19 @@ class NasemFormulador:
             require_absorbed_ca_p=getattr(req.opcoes, "require_absorbed_ca_p", False),
         ))
         warnings = list(result.get("warnings", []))
+        # O motor recebe CMS fixo; quem o estimou foi a etapa anterior, não o NASEM.
+        if getattr(req.opcoes, "consumo_ms_origem", "informado") == "estimado_nrc2001":
+            warnings = [w for w in warnings if "Consumo total de matéria seca foi fornecido" not in w]
+            warnings.append(
+                f"Consumo de MS adotado: {total_dm:.2f} kg/vaca/dia, estimado pela equação NRC (2001) "
+                "a partir dos dados do lote, não medido nem previsto pelo NASEM. "
+                "A estimativa afeta quantidades e custo da formulação."
+            )
+        if teto is not None:
+            warnings.append(
+                f"Teto operacional informado: nenhum ingrediente pode exceder {float(teto):.1f}% da matéria seca. "
+                "Controle de participação, não limite nutricional seguro nem garantia de dieta equilibrada."
+            )
         warnings += ["Cenário NASEM utiliza parâmetros complementares do exemplo oficial; "
                      "ainda é necessário explicitar/validar esses parâmetros na interface."]
         if any(i.origem_preco == "ilustrativo" for i in req.ingredientes):
@@ -142,6 +173,16 @@ class NasemFormulador:
                       nutrition["mp_intake_g_day"], nutrition["mp_requirement_g_day"], "atende"),
         ]
         comp = result.get("nutrient_composition") or {}
+        deficits_minerais = [
+            f"{bal['label']}: {bal['intake']:.2f} de {bal['requirement']:.2f} g/dia"
+            for bal in (comp.get("absorbed_mineral_checks") or {}).values()
+            if bal.get("status") == "viola"
+            and bal.get("intake") is not None and bal.get("requirement") is not None
+        ]
+        if deficits_minerais:
+            warnings.append("Atenção: déficits minerais observados pelo NASEM (alguns podem não "
+                            "ser restrições da otimização): " + "; ".join(deficits_minerais) + ". "
+                            "Não interpretar a dieta como nutricionalmente adequada.")
         for key, label, amount_key, limit_key in (
             ("fdn", "Fibra em detergente neutro (FDN)", "ndf_pct_dm", "ndf_min_pct_dm"),
             ("amido", "Amido", "starch_pct_dm", "starch_max_pct_dm"),

@@ -50,3 +50,15 @@ Os antigos `LEIA-ME-V3.md`, `LEIA-ME-V4.md`, `LEIA-ME-V5.md` e demais tutoriais 
 ## Arquivos principais
 
 `app.py` e `ui/pages.py` (interface); `models/contracts.py` (dados); `services/nasem_adapter.py` (integração NASEM); `formulation_engine.py` (SLSQP e regras); `services/nasem_requirements.py` (balanços minerais absorvidos); `services/diet_analysis.py` (dieta fixa); `services/pdf_report.py` (PDF); `tests/` (testes).
+
+## Novidades de uso (v7)
+
+**Consumo de MS:** na página *Formular dieta*, escolha entre (a) estimar automaticamente pela equação **NRC 2001** usando peso, leite, gordura e dias em lactação, ou (b) informar um consumo medido/estimado externamente. O motor NASEM recebe esse consumo como **entrada fixa**, não calcula o consumo espontâneo; a estimativa NRC não é uma medição nem uma validação de ingestão. A origem adotada fica nos avisos e no PDF. Fonte: https://pmc.ncbi.nlm.nih.gov/articles/PMC7825592/
+
+**Controle de concentração:** opcionalmente informe uma máxima participação por ingrediente em **% da MS**, como limite operacional da simulação. Por exemplo, 60% impede qualquer ingrediente de superar 60% da MS, mas **não é recomendação nutricional**. Pode aumentar o custo e eliminar candidatas se os ingredientes disponíveis forem insuficientes. O teto não substitui regras de inclusão individuais embasadas nem a avaliação de micronutrientes e minerais.
+
+**Indicadores:** o painel principal e o PDF mostram exigências/limites comparáveis; a composição bruta adicional aparece em seção informativa, sem repetição de “sem veredito”. Os déficits calculados de minerais absorvidos ganham aviso explícito mesmo quando não foram impostos como restrição.
+
+**Preços:** valor em R$/kg MN é preço **unitário**, não somável. O total financeiro é a soma dos custos de ingrediente na coluna R$/vaca/dia.
+
+**Correção no diagnóstico mineral:** os seis macrominerais absorvidos (Ca, P, Mg, Na, Cl, K) passam a ser consultados também com Ca/P ativados; na versão anterior a leitura final mostrava somente Ca/P nesse modo. Isso não impõe automaticamente os demais minerais como restrições.

@@ -31,7 +31,7 @@ EXPORTAVEIS = {"otimo": "Dieta formulada", "candidata_experimental": "Dieta cand
                "demonstracao": "Cenário demonstrativo"}
 TEXTO_EXPERIMENTAL = "CANDIDATA EXPERIMENTAL — NÃO É DIETA NUTRICIONALMENTE VALIDADA"
 SITUACAO = {"atende": "Atende", "viola": "Não atende", "nao_avaliado": "Não avaliado",
-            "informativo": "Informativo (sem veredito)"}
+            "informativo": "Informativo"}
 
 
 def _estilos() -> dict[str, ParagraphStyle]:
@@ -185,6 +185,10 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
         st_.append(_p(resultado.mensagem, S["b"]))
     if not demo:
         st_.append(_p(AVISO_PROFISSIONAL, S["peq"]))
+        deficientes = [i.rotulo for i in resultado.indicadores if i.status == "viola"]
+        if deficientes:
+            st_.append(_p("ATENÇÃO: exigências/limites não atendidos: " + ", ".join(deficientes) +
+                          ". Alguns diagnósticos não foram impostos na otimização.", S["aviso"]))
 
     # 1. Identificação
     st_ += [_p("1. Identificação", S["h2"]), _pares(S, [
@@ -228,6 +232,7 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
         notas.append("* Preço ilustrativo, não é preço de mercado confirmado.")
     if any(l.preco_mn_brl_kg is None or l.custo_brl is None for l in resumo.linhas):
         notas.append("Preço ou custo individual não informado para ao menos um ingrediente.")
+    notas.append("Preço por kg MN é unitário: não se somam preços. O total em R$/vaca/dia é a soma dos custos individuais.")
     st_ += [Spacer(1, 3)] + [_p(t, S["peq"]) for t in notas]
 
     # 4. Custos
@@ -257,22 +262,33 @@ def gerar_relatorio_pdf(resultado: ResultadoFormulacao, lote: Optional[Lote] = N
     # 5. Ingestão e indicadores nutricionais — limites de composição têm direção própria.
     st_.append(_p("5. Ingestão e indicadores nutricionais", S["h2"]))
     if resultado.indicadores:
-        linhas = []
+        principais, composicao = [], []
         for i in resultado.indicadores:
+            valor = num(i.ingerido, 2) if i.ingerido is not None else "Não disponível"
+            if i.status == "informativo" and i.chave not in ("fdn", "fdn_forragens", "amido"):
+                composicao.append([i.rotulo, valor, i.unidade])
+                continue
             direcao = ("Mínimo" if i.chave in ("fdn", "fdn_forragens") else
                        "Máximo" if i.chave == "amido" else "Exigência")
             limite = (f"{direcao}: {num(i.exigido, 2)}" if i.exigido is not None
-                      else "Não configurado" if i.chave in ("fdn", "fdn_forragens", "amido") else "—" if i.status == "informativo" else "Não disponível")
+                      else "Não configurado" if i.chave in ("fdn", "fdn_forragens", "amido")
+                      else "Não disponível")
             razao = (num(i.ingerido / i.exigido * 100, 1, "%")
-                     if i.chave in ("me", "mp", "calcio_absorvido", "fosforo_absorvido", "magnesio_absorvido", "sodio_absorvido", "cloro_absorvido", "potassio_absorvido") and i.ingerido is not None
-                     and i.exigido is not None and i.exigido > 0 else "—")
-            linhas.append([i.rotulo, i.unidade,
-                           num(i.ingerido, 2) if i.ingerido is not None else "Não disponível",
-                           limite, razao, SITUACAO.get(i.status, i.status)])
-        st_.append(_tabela(S, ["Indicador", "Unidade", "Valor", "Limite", "Valor / exigência", "Situação"],
-                           linhas, [42, 20, 24, 35, 26, 27], direita=(2, 4)))
-        st_.append(_p("Indicadores de composição em % da matéria seca são informativos quando não há exigência validada; "
-                       "o traço (—) indica que nenhum limite foi aplicado. "
+                     if i.chave in ("me", "mp", "calcio_absorvido", "fosforo_absorvido", "magnesio_absorvido", "sodio_absorvido", "cloro_absorvido", "potassio_absorvido")
+                     and i.ingerido is not None and i.exigido is not None and i.exigido > 0 else "—")
+            principais.append([i.rotulo, i.unidade, valor, limite, razao, SITUACAO.get(i.status, i.status)])
+        if principais:
+            for inicio in range(0, len(principais), 7):
+                st_.append(_tabela(S, ["Indicador", "Unidade", "Valor", "Limite", "Valor / exigência", "Situação"],
+                                   principais[inicio:inicio + 7], [42, 20, 24, 35, 26, 27], direita=(2, 4)))
+        if composicao:
+            st_.append(_p("Composição adicional (informativa; adequação não verificada)",
+                          ParagraphStyle("sec_comp", parent=S["b"], fontName="Helvetica-Bold",
+                                         textColor=VERDE, spaceBefore=8, spaceAfter=4)))
+            for inicio in range(0, len(composicao), 12):
+                st_.append(_tabela(S, ["Indicador", "Valor", "Unidade"],
+                                   composicao[inicio:inicio + 12], [106, 32, 36], direita=(1,)))
+        st_.append(_p("Indicadores informativos: não há exigência validada para esses teores de composição. Minerais totais diferem de absorvidos. "
                        "Limites opcionais são definidos pelo usuário, não são recomendações automáticas do NASEM.", S["peq"]))
     else:
         st_.append(_p("O formulador não informou indicadores nutricionais.", S["b"]))

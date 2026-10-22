@@ -7,6 +7,7 @@ import streamlit as st
 
 from models import ESTADOS, PADROES_AVANCADOS, Lote
 from services.diet_analysis import analisar_dieta
+from services.dmi_estimator import estimar_do_lote
 from services.demo_scenario import cenario_demonstrativo
 from services.financeiro import resumo_financeiro
 from services.ingredient_suggestion import sugerir_ingredientes
@@ -291,11 +292,42 @@ def pagina_formular() -> None:
             st.caption(f"+ {len(disp) - 8} ingrediente(s)")
         if not disp:
             st.warning("Nenhum ingrediente disponível.")
-    # O consumo de MS é informado, não presumido. Campo da formulação experimental.
-    consumo_ms = st.number_input(
-        "Consumo estimado de matéria seca (kg MS/vaca/dia)", min_value=0.1,
-        value=None, step=0.5, format="%.2f", key="form_consumo_ms",
-        help="Obrigatório neste protótipo; deve vir de medição/estimativa técnica do lote, não de valor padrão.")
+    st.markdown("**Consumo diário de matéria seca (CMS)**")
+    modo_consumo = st.radio(
+        "Como determinar o consumo de matéria seca?",
+        ["Estimar a partir do lote (NRC 2001)", "Informar consumo medido ou estimado externamente"],
+        key="form_consumo_modo", horizontal=True,
+        help="O motor utiliza um consumo fixo em kg MS/vaca/dia. A estimativa é um auxílio, não uma medição.")
+    consumo_ms_origem = "estimado_nrc2001" if modo_consumo.startswith("Estimar") else "informado"
+    if consumo_ms_origem == "estimado_nrc2001":
+        try:
+            consumo_ms = estimar_do_lote(lote) if lote is not None else None
+            if consumo_ms is not None:
+                st.info(f"CMS estimado: **{consumo_ms:.2f} kg MS/vaca/dia** — equação NRC (2001), "
+                        "usando peso, produção, gordura do leite e dias em lactação. "
+                        "Não é consumo medido, nem previsão do NASEM 2021.")
+            else:
+                st.warning("Cadastre o lote antes de estimar o consumo de matéria seca.")
+        except (ValueError, TypeError) as exc:
+            st.error(f"Não foi possível estimar o consumo: {exc}")
+            consumo_ms = None
+    else:
+        consumo_ms = st.number_input(
+            "Consumo estimado de matéria seca (kg MS/vaca/dia)", min_value=0.1,
+            value=None, step=0.5, format="%.2f", key="form_consumo_ms",
+            help="Informe o consumo medido na fazenda ou uma estimativa obtida por profissional.")
+    st.caption("A formulação continua usando CMS fixo. O consumo real pode variar com dieta, ambiente e manejo; "
+               "revise a estimativa antes de qualquer uso prático.")
+    st.markdown("**Controle operacional da composição (opcional)**")
+    limite_participacao = st.number_input(
+        "Máxima participação de cada ingrediente (% da MS)",
+        min_value=1.0, max_value=100.0, value=None, step=5.0, format="%.1f",
+        key="form_share_max",
+        help="Teto operacional informado pelo usuário: impede a concentração excessiva em um único alimento, "
+             "mas não substitui limites nutricionais de inclusão fundamentados.")
+    st.caption("Sem teto, o otimizador de menor custo pode selecionar apenas os alimentos mais baratos. "
+               "Se ativar, todos os ingredientes disponíveis recebem o mesmo teto percentual da MS; "
+               "isso pode elevar o custo ou impedir uma solução.")
     st.markdown("**Restrições opcionais de composição (% da matéria seca)**")
     st.caption("Sem valor informado, FDN e amido são calculados apenas como indicadores informativos. "
                "Valores digitados são definidos pelo usuário, não recomendações automáticas NASEM.")
@@ -325,6 +357,8 @@ def pagina_formular() -> None:
     req, erros = montar_requisicao()
     if req is not None:
         req.opcoes.consumo_ms_kg_dia = consumo_ms
+        req.opcoes.consumo_ms_origem = consumo_ms_origem
+        req.opcoes.max_share_ingredient_pct_dm = limite_participacao
         req.opcoes.min_ndf_pct_dm = limite_fdn
         req.opcoes.max_starch_pct_dm = limite_amido
         req.opcoes.min_forage_ndf_pct_dm = limite_fdn_forragem
@@ -527,6 +561,10 @@ def pagina_resultados() -> None:
             st.rerun()
         return
     _banner_resultado(res)
+    violacoes = [i.rotulo for i in res.indicadores if i.status == "viola"]
+    if violacoes and res.status in ("otimo", "candidata_experimental"):
+        st.warning("Exigências/limites NÃO atendidos nesta candidata: " + ", ".join(violacoes) +
+                   ". Esses diagnósticos podem não ter sido impostos durante a otimização.")
     if res.status in ("otimo", "candidata_experimental"):
         st.caption("Esta formulação não substitui a avaliação de médico-veterinário ou zootecnista. "
                    "Confira os requisitos não avaliados antes de qualquer aplicação prática.")
@@ -555,6 +593,8 @@ def pagina_resultados() -> None:
         graf = df.iloc[:-1]
         st.dataframe(df, hide_index=True, use_container_width=True, column_config={
             c: st.column_config.NumberColumn(format="%.2f") for c in df.columns[1:]})
+        st.caption("Preço (R$/kg MN) é unitário e não deve ser somado. O total da dieta é a soma da coluna "
+                   "Custo (R$/vaca/dia).")
         tot_ms = resumo.consumo_ms_kg
         fig = go.Figure(go.Bar(x=graf["kg MS/vaca/dia"] / tot_ms * 100, y=graf["Ingrediente"], orientation="h",
                                marker_color=VERDE, hovertemplate="%{y}: %{x:.1f}% da MS<extra></extra>"))
@@ -563,17 +603,27 @@ def pagina_resultados() -> None:
         st.plotly_chart(fig, use_container_width=True)
     with t2:
         if res.indicadores:
-            rows = []
+            principais, detalhados = [], []
             for i in res.indicadores:
                 limite = ("Mínimo" if i.chave in ("fdn", "fdn_forragens") else "Máximo" if i.chave == "amido"
                           else "Exigência")
-                rows.append({"Indicador": i.rotulo, "Valor": i.ingerido, "Unidade": i.unidade,
-                             "Tipo de limite": limite if i.exigido is not None else "—",
-                             "Limite": i.exigido,
-                             "Situação": {"atende": "Atende", "viola": "Não atende",
-                                          "informativo": "Informativo (sem limite)",
-                                          "nao_avaliado": "Não avaliado"}.get(i.status, i.status)})
-            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+                row = {"Indicador": i.rotulo, "Valor": i.ingerido, "Unidade": i.unidade,
+                       "Tipo de limite": limite if i.exigido is not None else "—",
+                       "Limite": i.exigido,
+                       "Situação": {"atende": "Atende", "viola": "Não atende",
+                                    "informativo": "Informativo",
+                                    "nao_avaliado": "Não avaliado"}.get(i.status, i.status)}
+                if i.status == "informativo" and i.chave not in ("fdn", "amido", "fdn_forragens"):
+                    detalhados.append({"Indicador": i.rotulo, "Valor": i.ingerido, "Unidade": i.unidade})
+                else:
+                    principais.append(row)
+            if principais:
+                st.dataframe(pd.DataFrame(principais), hide_index=True, use_container_width=True)
+            if detalhados:
+                with st.expander("Composição detalhada — valores informativos (sem verificação de adequação)"):
+                    st.dataframe(pd.DataFrame(detalhados), hide_index=True, use_container_width=True)
+                    st.caption("Os valores de composição não são comparados automaticamente a exigências "
+                               "nutricionais. Ingestão bruta não equivale a absorção.")
             # Comparação ingerido/exigido é válida para ME e MP. Limites máximo/mínimo
             # de amido/FDN têm outra semântica e não devem entrar no gráfico de 100%.
             par = [i for i in res.indicadores if i.chave in ("me", "mp")

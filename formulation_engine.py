@@ -476,8 +476,11 @@ def formulate_diet(
     forage_ndf = forage_ndf_pct(x)
     ndf_pct = percent_dm(x, 'ndf')
     starch_pct = percent_dm(x, 'starch')
-    # Balanços absorvidos: avaliar também quando NÃO são restrições do otimizador.
+    # Balanços absorvidos: exibir SEMPRE os mesmos seis minerais quando disponíveis,
+    # mesmo quando Ca/P foram usados como restrição. A execução extra NASEM é apenas
+    # da dieta final e não altera a solução já validada pelo SLSQP.
     from services.nasem_requirements import ler_balancos
+    from_cache = {}
     if request.require_absorbed_ca_p:
         from_cache = {
             "calcio_absorvido": {"label": "Cálcio absorvido", "unit": "g/dia", "intake": m[4],
@@ -485,14 +488,20 @@ def formulate_diet(
             "fosforo_absorvido": {"label": "Fósforo absorvido", "unit": "g/dia", "intake": m[6],
                 "requirement": m[7], "status": "atende", "source": "NASEM 2021 via nasem_dairy"},
         }
+    try:
+        diet_final = pd.DataFrame({"Feedstuff": names, "kg_user": x})
+        output_final = evaluator(diet_final, copy.deepcopy(animal), copy.deepcopy(equations), copy.deepcopy(infusion))
+        absorbed = ler_balancos(output_final)
+        # Preservar os valores de Ca/P usados para aceitar a candidata caso a
+        # leitura posterior não disponibilize essas duas grandezas.
+        for mineral, dado in from_cache.items():
+            if mineral not in absorbed or absorbed[mineral]["status"] == "nao_avaliado":
+                absorbed[mineral] = dado
+    except (ValueError, KeyError, TypeError, AttributeError, RuntimeError) as exc:
         absorbed = from_cache
-    else:
-        try:
-            diet_final = pd.DataFrame({"Feedstuff": names, "kg_user": x})
-            output_final = evaluator(diet_final, copy.deepcopy(animal), copy.deepcopy(equations), copy.deepcopy(infusion))
-            absorbed = ler_balancos(output_final)
-        except (ValueError, KeyError, TypeError, AttributeError):
-            absorbed = {}
+        base["warnings"].append(
+            f"Diagnóstico mineral adicional indisponível na avaliação final: {type(exc).__name__}."
+        )
     for item in absorbed.values():
         if item["status"] == "viola":
             descriptive_alerts.append(

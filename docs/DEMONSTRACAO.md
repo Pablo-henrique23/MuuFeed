@@ -17,3 +17,10 @@ python scripts/verificar_nasem_minerais.py
 ```
 
 A execução com o NASEM real deve ser verificada no computador usado na apresentação; os testes simulados não provam compatibilidade científica.
+
+### Cenários adicionais v7
+
+- **Mesmo lote com CMS informado:** selecione “Informar consumo medido ou estimado externamente”, use `24,521` kg MS/vaca/dia e mantenha os preços anteriores. Reproduz as premissas dos relatórios A1/A2.
+- **CMS estimado:** selecione “Estimar a partir do lote (NRC 2001)”; no lote de 624,8 kg, 25,062 kg de leite, 4,55% de gordura e 100 dias de lactação, espera-se cerca de **21,48 kg MS/dia**; indique que é estimativa, não dado observado.
+- **Diagnóstico da concentração:** compare com teto de participação **vazio** e com **60% da MS**. O limite de 60% é para testar a ferramenta, não é regra nutricional universal. O solver pode encontrar outra dieta ou não achar candidata.
+- **Limites e minerais:** ative Ca/P separadamente; demonstre que os demais minerais (principalmente Na/Cl) ainda podem faltar. Não alegar adequação total.
