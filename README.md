@@ -1,4 +1,4 @@
-# MuuFeed 🐄
+# MuuFeed
 
 **Sistema especialista experimental de apoio à formulação e análise econômica de dietas para vacas leiteiras em lactação.** Desenvolvido para o Hackathon Rerum 2026.2.
 
