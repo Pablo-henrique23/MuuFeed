@@ -64,11 +64,20 @@ def analisar_dieta(lote, ingredientes, quantidades_mn: dict[str, float], *,
                 starch_ok &= bool(valid)
                 if valid:
                     starch_mass += kg_dm * float(val) / 100
-        forage = is_forage(ing.nome_original)
-        if forage is None or pd.isna(catalog.loc[ing.nome_original, "Fd_NDF"]):
+        feed_row = catalog.loc[ing.nome_original]
+        forage = is_forage(ing.nome_original,
+                           feed_type=feed_row.get("Fd_Type"),
+                           feed_category=feed_row.get("Fd_Category"))
+        if forage is None:
             forage_ok = False
         elif forage:
-            forage_ndf_mass += kg_dm * float(catalog.loc[ing.nome_original, "Fd_NDF"]) / 100
+            val = pd.to_numeric(feed_row["Fd_NDF"], errors="coerce")
+            if pd.isna(val) or not math.isfinite(float(val)) or not 0 <= float(val) <= 100:
+                forage_ok = False
+            else:
+                forage_ndf_mass += kg_dm * float(val) / 100
+        # Concentrados/subprodutos classificados não contribuem à fNDF.
+        # A ausência de Fd_NDF deles pode impedir FDN total, mas não fNDF.
     if total_dm <= 0:
         raise ValueError("A dieta deve ter quantidade positiva de pelo menos um ingrediente.")
     diet = pd.DataFrame({"Feedstuff": [r["ingredient"] for r in rows],

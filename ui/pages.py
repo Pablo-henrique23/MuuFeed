@@ -88,11 +88,16 @@ def pagina_lote() -> None:
         a_topo, b_topo = st.columns(2)
         nome = a_topo.text_input("Nome ou identificação do lote", key="f_nome")
         n = b_topo.number_input("Número de vacas", 1, 100000, key="f_n", step=1)
-        raca = a_topo.selectbox("Raça", ["Holandesa", "Jersey", RACA_GENERICA], key="f_raca")
+        raca = a_topo.selectbox(
+            "Raça", ["Holandesa", "Jersey", RACA_GENERICA], key="f_raca",
+            help="Holandesa/Jersey têm ramo específico. Outra usa o ramo 'Other' do NASEM, "
+                 "apenas como aproximação experimental.",
+        )
         raca_descricao = ""
         if raca == RACA_GENERICA:
             raca_descricao = a_topo.text_input(
                 "Nome da outra raça (opcional)", key="f_raca_descricao", max_chars=60,
+                help="Para registro no relatório; não modifica a parametrização genérica do NASEM.",
             )
         estado = b_topo.selectbox(
             "Estado fisiológico", ["Lactating Cow"], format_func=ESTADOS.get,
@@ -170,10 +175,11 @@ def pagina_sugestao_automatica() -> None:
     st.title("Sugestão automática de ingredientes")
     st.caption("Modo assistido: o MuuFeed apresenta ingredientes candidatos e você confirma "
                "disponibilidade e preços antes de formular a dieta.")
-    st.info("**Como funciona:** seis ingredientes iniciais são recomendados. "
+    st.info("**Como funciona:** seis ingredientes iniciais são candidatos fixos. "
             "Opcionalmente o lote acrescenta alternativas por critérios explícitos de "
-            "produção e dias de lactação."
-            "Os preços são ilustrativos.")
+            "produção e dias de lactação — isso NÃO é uma recomendação nutricional validada. "
+            "Os preços são ilustrativos. **As quantidades e exigências são calculadas "
+            "com o NASEM somente depois da sua confirmação**.")
     if ss.get("lote") is None:
         st.warning("Cadastre e salve o lote primeiro.")
         if st.button("Ir ao lote", key="assistir_lote"):
@@ -193,6 +199,12 @@ def pagina_sugestao_automatica() -> None:
              "Não é uma prescrição ou quantidade recomendada.")
     sugestoes, avisos = sugerir_ingredientes(ss["lote"], cat, incluir_fonte_sodio=incluir_fonte_sodio,
                                               ampliar_pelo_lote=ampliar_pelo_lote)
+    if ampliar_pelo_lote:
+        adicionais = [sug.nome_pt for sug in sugestoes if sug.opcional and sug.grupo != "Mineral"]
+        if adicionais:
+            st.caption("**Alternativas selecionadas pelo perfil deste lote (inicialmente desmarcadas):** "
+                       + ", ".join(adicionais) + ". Os seis candidatos básicos continuam iguais "
+                       "em todos os lotes; apenas estas alternativas variam conforme produção e dias em lactação.")
     if incluir_fonte_sodio:
         st.warning("Suplementos minerais exigem atenção: após confirmar, informe o máximo "
                    "(kg MN/vaca/dia) do sal em 'Ingredientes e preços' com orientação profissional. "
@@ -405,6 +417,11 @@ def pagina_formular() -> None:
     with st.expander("Avançado: FDN proveniente de forragens (opcional)"):
         st.caption("A FDN proveniente de forragens é diferente da FDN total e NÃO equivale "
                    "à fibra fisicamente efetiva (peNDF). Sem limite, segue informativa.")
+        st.caption("**Exemplo para testar (NASEM 2021, tabela 5-1):** FDN de forragens "
+                   "mínima **19%**, FDN total mínima **25%** e amido máximo **30%** "
+                   "da MS. Essa combinação se refere a TMR com forragem de partículas "
+                   "adequadas e milho seco moído como fonte predominante de amido; "
+                   "não é valor padrão nem prescrição para qualquer lote.")
         limite_fdn_forragem = st.number_input(
             "FDN proveniente de forragens — mínimo (% da MS, opcional)",
             min_value=0.0, max_value=100.0, value=None, step=0.5, format="%.2f",

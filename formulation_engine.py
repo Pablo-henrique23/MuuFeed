@@ -230,10 +230,22 @@ def formulate_diet(
 
     # FDN de forragens requer classificação exata, nunca inferida por pedaços do nome.
     from services.forage_ndf import is_forage
-    forage_flags = {f.name: is_forage(f.name) for f in request.feeds}
+    # Classificar todos os 284 alimentos possíveis pelos metadados NASEM.
+    # A lista de nomes curados é somente fallback para testes sintéticos sem
+    # Fd_Type/Fd_Category; nunca inferir pela palavra contida no nome.
+    forage_flags = {}
+    for feed in request.feeds:
+        if lib_nut is not None:
+            row_meta = sub.loc[feed.name]
+            forage_flags[feed.name] = is_forage(
+                feed.name, feed_type=row_meta.get('Fd_Type'),
+                feed_category=row_meta.get('Fd_Category'))
+        else:
+            forage_flags[feed.name] = is_forage(feed.name)
     def forage_ndf_pct(x: np.ndarray) -> float | None:
-        if not comp or any(forage_flags[f.name] is None or comp[f.name]['ndf'] is None
-                           for f in request.feeds):
+        if (not comp or any(v is None for v in forage_flags.values())
+                or any(comp[f.name]['ndf'] is None for f in request.feeds
+                       if forage_flags[f.name])):
             return None
         return float(sum(float(q) * comp[f.name]['ndf'] for f, q in zip(request.feeds, x)
                          if forage_flags[f.name]) / float(request.total_dm_kg))
@@ -241,8 +253,12 @@ def formulate_diet(
         if any(v is None for v in forage_flags.values()):
             unknown = [n for n,v in forage_flags.items() if v is None]
             raise ValueError(f"Classificação de forragem pendente para: {unknown}. Não é seguro aplicar limite de FDN de forragens.")
-        if not comp or any(comp[f.name]['ndf'] is None for f in request.feeds):
-            raise ValueError('FDN de forragens: dado NASEM indisponível; restrição não aplicada')
+        # Só as forragens contribuem para esta métrica: a FDN ausente de
+        # concentrados/subprodutos NÃO impede calcular fNDF. A restrição de
+        # FDN total (acima) permanece exigindo dados completos de TODOS.
+        if not comp or any(comp[f.name]['ndf'] is None for f in request.feeds
+                           if forage_flags[f.name]):
+            raise ValueError('FDN de forragens: dado NASEM indisponível para forragem; restrição não aplicada')
 
     feeds = request.feeds
     n = len(feeds)
