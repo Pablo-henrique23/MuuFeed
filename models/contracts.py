@@ -7,6 +7,7 @@ por vaca/dia; a matéria natural (MN) é derivada pelo teor de MS do alimento.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
+import math
 from services.breed import para_raca_nasem, utiliza_raca_generica, AVISO_RACA_GENERICA
 from typing import Optional
 
@@ -130,13 +131,36 @@ class Ingrediente:
 
 
 def validar_ingredientes(ings: list[Ingrediente]) -> list[str]:
-    erros = []
+    """Valida unidades, finitude e limites operacionais antes do cálculo."""
+    erros: list[str] = []
     if not ings:
         erros.append("Selecione ao menos um ingrediente disponível.")
     for i in ings:
-        if i.preco_mn_brl_kg is None or i.preco_mn_brl_kg <= 0:
+        try:
+            preco = float(i.preco_mn_brl_kg)
+        except (ValueError, TypeError):
+            preco = float("nan")
+        if not math.isfinite(preco) or preco <= 0:
             erros.append(f"Informe o preço (R$/kg de MN) de {i.nome_pt}.")
-        if i.min_kg_mn is not None and i.max_kg_mn is not None and i.min_kg_mn > i.max_kg_mn:
+        try:
+            ms = float(i.ms_pct)
+        except (ValueError, TypeError):
+            ms = float("nan")
+        if not math.isfinite(ms) or not 0 < ms <= 100:
+            erros.append(f"Matéria seca inválida para {i.nome_pt} (0 < MS <= 100%).")
+        limites = []
+        for nome, valor in (("mínimo", i.min_kg_mn), ("máximo", i.max_kg_mn)):
+            if valor is None:
+                limites.append(None)
+                continue
+            try:
+                numero = float(valor)
+            except (ValueError, TypeError):
+                numero = float("nan")
+            if not math.isfinite(numero) or numero < 0:
+                erros.append(f"Em {i.nome_pt}, {nome} de inclusão deve ser finito e não negativo.")
+            limites.append(numero)
+        if all(v is not None and math.isfinite(v) for v in limites) and limites[0] > limites[1]:
             erros.append(f"Em {i.nome_pt}, o mínimo é maior que o máximo.")
     return erros
 

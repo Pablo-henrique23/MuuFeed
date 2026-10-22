@@ -41,9 +41,10 @@ class NasemFormulador:
             return False, "O consumo de matéria seca deve ser numérico."
         if not math.isfinite(value) or value <= 0:
             return False, "O consumo de matéria seca deve ser maior que zero."
-        if any(i.preco_mn_brl_kg is None or i.preco_mn_brl_kg <= 0 or
-               not 0 < i.ms_pct <= 100 for i in req.ingredientes):
-            return False, "Todos os ingredientes devem ter preço positivo e MS válida."
+        from models.contracts import validar_ingredientes
+        erros_ingredientes = validar_ingredientes(req.ingredientes)
+        if erros_ingredientes:
+            return False, "; ".join(erros_ingredientes)
         for campo, rotulo in (("min_ndf_pct_dm", "FDN mínima"), ("max_starch_pct_dm", "Amido máximo"), ("max_ether_extract_pct_dm", "Extrato etéreo máximo"), ("min_forage_ndf_pct_dm", "FDN de forragens mínima")):
             valor = getattr(req.opcoes, campo, None)
             if valor is not None:
