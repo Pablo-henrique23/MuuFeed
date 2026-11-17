@@ -1,6 +1,6 @@
 # MuuFeed
 
-**Sistema especialista experimental de apoio à formulação e análise econômica de dietas para vacas leiteiras em lactação.** Desenvolvido para o Hackathon Rerum 2026.2.
+**Sistema especialista experimental de apoio à formulação e análise econômica de dietas para vacas leiteiras em lactação.** Desenvolvido para o Hackathon Rerum da Semana da Computação UFJF 2026.
 
 O MuuFeed combina uma biblioteca de ingredientes baseada no **NASEM (2021)**, uma etapa de **pré-seleção dinâmica por programação linear**, avaliação nutricional pelo pacote Python `nasem_dairy` e **otimização de menor custo com SciPy/SLSQP**. Apresenta resultados em português, tabelas e relatórios PDF. Funciona **localmente/offline após a instalação das dependências**.
 
